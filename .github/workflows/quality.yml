@@ -1,0 +1,63 @@
+name: Backend quality and MySQL invariants
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      mysql:
+        image: mysql:8.4.8
+        env:
+          MYSQL_ROOT_PASSWORD: ci-provisioning-only
+          MYSQL_ROOT_HOST: '%'
+          MYSQL_DATABASE: livora_test_ci
+          MYSQL_USER: livora_ci
+          # Isolated service-only fixture password, never used by a deployed application.
+          MYSQL_PASSWORD: ci-disposable-database-only
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+    env:
+      NODE_ENV: test
+      DB_HOST: 127.0.0.1
+      DB_PORT: '3306'
+      DB_NAME: livora_test_ci
+      DB_USER: livora_ci
+      DB_PASSWORD: ci-disposable-database-only
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci
+      - name: Configure trigger creation on the isolated test service
+        env:
+          DB_TEST_ADMIN_PASSWORD: ci-provisioning-only
+        run: node .github/scripts/configure-test-db.mjs
+      - run: npm run check
+      - run: npm run test:db
+      - run: npm run db:status
+      - run: npm run db:migrate
+      - run: npm audit --audit-level=high
+      - name: Scan repository history for secrets locally with Gitleaks
+        run: |
+          curl --fail --location --silent --show-error https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz --output "$RUNNER_TEMP/gitleaks_8.30.1_linux_x64.tar.gz"
+          curl --fail --location --silent --show-error https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_checksums.txt --output "$RUNNER_TEMP/gitleaks_8.30.1_checksums.txt"
+          cd "$RUNNER_TEMP"
+          rg ' gitleaks_8.30.1_linux_x64.tar.gz$' gitleaks_8.30.1_checksums.txt | sha256sum --check
+          tar -xzf gitleaks_8.30.1_linux_x64.tar.gz gitleaks
+          ./gitleaks git "$GITHUB_WORKSPACE" --redact --no-banner

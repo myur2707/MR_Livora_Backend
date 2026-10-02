@@ -1,0 +1,34 @@
+{
+  "name": "mr-livora-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "check-format": "prettier --check .",
+    "test": "tsx --test tests/migrations.test.ts",
+    "test:db": "tsx --test tests/database.integration.test.ts",
+    "db:validate": "tsx src/database/cli.ts validate",
+    "db:status": "tsx src/database/cli.ts status",
+    "db:migrate": "tsx src/database/cli.ts migrate",
+    "check": "npm run check-format && npm run lint && npm run typecheck && npm test && npm run build && npm run db:validate"
+  },
+  "dependencies": {
+    "mysql2": "3.24.5"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "24.19.1",
+    "eslint": "10.11.0",
+    "prettier": "3.9.9",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.71.0"
+  }
+}
