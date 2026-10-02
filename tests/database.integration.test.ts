@@ -9,6 +9,7 @@ import { loadMigrations } from '../src/database/migrations.js';
 import { migrate, openDatabase, readHistory, schemaTables } from '../src/database/runner.js';
 import { createFixture, insert } from './fixtures.js';
 import type { SqlValue } from './fixtures.js';
+import { assertTenantSchema, assertUtcTimestamps } from './schema-contract.js';
 
 interface ValueRow extends RowDataPacket {
   value: string | number;
@@ -61,7 +62,19 @@ void test('MySQL 8.4 schema and security invariants on an empty disposable schem
       'Do not run fixtures on a partially migrated schema',
     );
 
+    await suite.test(
+      'every tenant table and resource relationship enforces society scope',
+      async () => {
+        await assertTenantSchema(db);
+      },
+    );
+
     const person = await insert(db, 'INSERT INTO persons () VALUES ()');
+
+    await suite.test('database sessions and stored creation timestamps use UTC', async () => {
+      await assertUtcTimestamps(db, person);
+    });
+
     const user = await insert(db, 'INSERT INTO users (person_id, email_normalized) VALUES (?, ?)', [
       person,
       'synthetic@example.invalid',

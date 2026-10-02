@@ -40,6 +40,29 @@ The scenarios below were executed through the real-DB suite or local verificatio
 
 Initial DB validation exposed a mysql2 BIGINT-string lock result and MySQL trigger-creation policy under binary logging. The lock conversion was corrected. The isolated administrator explicitly enabled the test-only trigger policy; no broad server privilege was given to the migration login. The partial schema was retained and a different fresh schema used; no tables/data were dropped. The successful run used dedicated schema-scoped privileges (DELETE is additionally granted for negative test attempts).
 
+## Step 1 prompt revalidation
+
+On **2026-10-02 (Asia/Calcutta)**, the existing Step 1 implementation was audited against the repeated prompt. All six required database documents and all 23 requested tables were present. The four supporting tables (`society_persons`, `membership_roles`, `bill_adjustments`, `payment_reversals`) retain their documented identity/privacy, role-assignment and audit justifications.
+
+The already-published migrations **001–005 were reused unchanged**. No new migration, business API or UI was needed. Test coverage was extended in `tests/schema-contract.ts` and `tests/database.integration.test.ts`:
+
+- Every tenant table must have a non-null unsigned society key, a society foreign key and a unique `(society_id,id)` key.
+- Every foreign key to a tenant resource must include the society key in that same relationship.
+- Database sessions use `+00:00`, and a newly stored creation timestamp matches UTC.
+
+Verification used a **new, separate MySQL 8.4.8 instance** on an available loopback port with a newly initialized data directory and a schema-scoped test login. The existing XAMPP server and all previous database data were left unchanged. The workspace `.env` was preserved; test connection settings were supplied through the child process environment.
+
+| Check                                                                             | Result                                                                                               |
+| --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Formatting, lint, strict typecheck, offline tests, build and migration validation | PASS; 7 offline tests and 5 additive migrations                                                      |
+| Fresh-database integration suite, including the two new schema checks             | PASS; 17 tests (16 scenarios plus parent suite), no skips                                            |
+| Migration status and second application                                           | PASS; 5 applied/0 pending, then 0 migrations applied                                                 |
+| Live schema and data-dictionary audit                                             | PASS; 27 domain tables, metadata, 17 triggers, all 219 columns documented                            |
+| Required deliverable documents                                                    | PASS; ERD, dictionary, constraints/indexes, tenant isolation, resident onboarding and migration plan |
+| Dependency audit                                                                  | PASS; 0 reported vulnerabilities                                                                     |
+
+The schema's cross-row financial totals, occupancy/configuration overlaps and authenticated read authorization remain explicitly assigned to later service transactions in `docs/database/CONSTRAINTS_AND_INDEXES.md` and `TENANT_ISOLATION.md`. The baseline is additive; removing its tables would be destructive, so no automatic down command was introduced. Archive/retention, full-reversal behavior, safe development fixtures and operator recovery remain documented in `MIGRATION_PLAN.md`.
+
 ## Remaining review and later-step gates
 
 - Review ERD, financial full-reversal policy, archive/retention decisions and migration privilege/recovery plan before deployment.
