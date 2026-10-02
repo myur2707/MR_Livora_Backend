@@ -1,5 +1,7 @@
 # Step 1 validation log
 
+The user's complete 12-case Step 1 checklist was subsequently executed on another fresh isolated instance; see [Step 1 manual verification](STEP_1_MANUAL_VERIFICATION.md) for the per-case results and data-preservation evidence.
+
 The initial Step 1 results below are supplemented by the [Prompt 0 verification](PROMPT_0_VERIFICATION.md), which covers a fresh GitHub clone, repeated negative checks and the subsequently successful hosted CI run.
 
 Date: **2026-10-02 (Asia/Calcutta)**. Environment: Windows, portable Node **24.21.0**, npm bundled with that Node, isolated loopback MySQL **8.4.8** on port 3307. No pre-existing/shared/production database was used. Schemas were newly provisioned; `.env`, local credentials/data and portable tools are Git-ignored. Frontend Git status remained clean.
