@@ -1,5 +1,7 @@
 # Step 5 verification
 
+This is the original implementation snapshot. See [the later Step 4/5 manual verification](STEP_4_5_MANUAL_VERIFICATION.md) for the current checklist results.
+
 Verified locally on 2 October 2026 with portable Node 24.21.0, npm 11.19.0, MySQL 8.4.8 and Chromium. Only Step 5 was implemented; prior database, authentication, onboarding and static PWA boundaries are preserved.
 
 | Check                      | Result                                                                                                                                                                                             |

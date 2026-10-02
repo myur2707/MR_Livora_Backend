@@ -1,5 +1,7 @@
 # Step 4 verification — 2026-10-02
 
+This is the original implementation snapshot. See [the later Step 4/5 manual verification](STEP_4_5_MANUAL_VERIFICATION.md) for the current checklist results.
+
 Scope: initial society onboarding and committee verification. Migrations 001–007 and completed financial/audit protections are preserved. Additive 008 adds onboarding, invitations and safe event history plus lifecycle/immutability guards.
 
 | Check                                   | Executed result                                                                                                                                                                    |
