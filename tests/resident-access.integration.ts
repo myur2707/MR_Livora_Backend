@@ -293,6 +293,23 @@ export async function residentAccessIntegration(suite: TestContext, db: Connecti
           [a.society, target.id],
         );
         assert.equal((await holder.request('/society/access')).status, 403);
+        const history = await committee.request('/society/resident-invitations?status=all');
+        assert.equal(history.status, 200);
+        assert.equal(history.data['total'], 1);
+        const records = history.data['items'];
+        assert.ok(Array.isArray(records));
+        assert.equal(records.length, 1);
+        assert.ok(
+          records.some(
+            (record: unknown) =>
+              typeof record === 'object' &&
+              record !== null &&
+              'personId' in record &&
+              record.personId === String(target.id) &&
+              'status' in record &&
+              record.status === 'ACCEPTED',
+          ),
+        );
         assert.equal(
           (await holder.request('/auth/society-context', { societyId: String(c.society) })).status,
           204,

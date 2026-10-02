@@ -22,7 +22,7 @@ interface InviteRow extends RowDataPacket {
   delivery_status: string;
 }
 const select =
-  "SELECT i.id,i.society_id,i.person_id,i.flat_id,i.email_normalized,i.expires_at,i.status,d.delivery_status,p.display_name,s.name FROM invitations i JOIN resident_invitation_details d ON d.society_id=i.society_id AND d.invitation_id=i.id AND d.intended_action='RESIDENT_JOIN' JOIN roles r ON r.society_id=i.society_id AND r.id=i.role_id AND r.code='RESIDENT' AND r.archived_at IS NULL JOIN society_persons p ON p.society_id=i.society_id AND p.person_id=i.person_id AND p.archived_at IS NULL JOIN societies s ON s.id=i.society_id";
+  "SELECT i.id,i.society_id,i.person_id,i.flat_id,i.email_normalized,i.expires_at,i.status,d.delivery_status,p.display_name,s.name FROM invitations i JOIN resident_invitation_details d ON d.society_id=i.society_id AND d.invitation_id=i.id AND d.intended_action='RESIDENT_JOIN' JOIN roles r ON r.society_id=i.society_id AND r.id=i.role_id AND r.code='RESIDENT' JOIN society_persons p ON p.society_id=i.society_id AND p.person_id=i.person_id JOIN societies s ON s.id=i.society_id";
 export class ResidentInvitations {
   constructor(
     readonly identity: ResidentIdentity,
@@ -259,7 +259,7 @@ export class ResidentInvitations {
       await rows<InviteRow>(
         db,
         select +
-          " WHERE i.token_hash=? AND i.status='PENDING' AND i.expires_at>? AND s.status='ACTIVE' AND s.archived_at IS NULL",
+          " WHERE i.token_hash=? AND i.status='PENDING' AND i.expires_at>? AND s.status='ACTIVE' AND s.archived_at IS NULL AND p.archived_at IS NULL AND r.archived_at IS NULL",
         [tokenHash(token), sqlTime(this.identity.property.access.clock())],
       )
     )[0];
