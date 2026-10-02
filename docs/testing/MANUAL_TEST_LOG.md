@@ -1,5 +1,7 @@
 # Step 1 validation log
 
+The initial Step 1 results below are supplemented by the [Prompt 0 verification](PROMPT_0_VERIFICATION.md), which covers a fresh GitHub clone, repeated negative checks and the subsequently successful hosted CI run.
+
 Date: **2026-10-02 (Asia/Calcutta)**. Environment: Windows, portable Node **24.21.0**, npm bundled with that Node, isolated loopback MySQL **8.4.8** on port 3307. No pre-existing/shared/production database was used. Schemas were newly provisioned; `.env`, local credentials/data and portable tools are Git-ignored. Frontend Git status remained clean.
 
 The scenarios below were executed through the real-DB suite or local verification commands. They are recorded here for review, rather than marked as unperformed browser tests. Defect links are not available because no issue tracker is configured.
@@ -41,7 +43,7 @@ Initial DB validation exposed a mysql2 BIGINT-string lock result and MySQL trigg
 ## Remaining review and later-step gates
 
 - Review ERD, financial full-reversal policy, archive/retention decisions and migration privilege/recovery plan before deployment.
-- Validate hosted CI on GitHub after the user commits/publishes these changes. No commit, push or deployment was performed.
+- Hosted CI was subsequently verified successfully after publication and a scanner setup fix; see [Prompt 0 verification](PROMPT_0_VERIFICATION.md) for the exact passing run. Initial Step 1 verification involved no commit, push or deployment.
 - Before production, verify backup restoration, remote TLS/network isolation and deployment-specific binary-logging/trigger policy. Define retention durations with the operator; none are invented by this baseline.
 - Future API steps must implement authentication/authorization, pending resident approval, token consumption, cross-row financial totals/limits and transaction races described in database docs. Database constraints alone do not authorize reads or enforce aggregate balances.
 
