@@ -2,7 +2,9 @@
 
 Smart Community Management — Connect. Manage. Live Better.
 
-Step 1 implements SocietyEase/MR Livora's shared-schema database and safe migration tooling. There are no business APIs yet. `../MR_Livora_Frontend` is the separate Angular PWA repository; it is reserved for later steps. Follow [AGENTS.md](AGENTS.md) before further work.
+Steps 1 and 3 implement SocietyEase/MR Livora's shared-schema database, safe migrations and backend authentication/authorization. Business APIs remain unimplemented. `../MR_Livora_Frontend` is the separate Angular PWA repository. Follow [AGENTS.md](AGENTS.md) before further work.
+
+Authentication setup, API contracts, runtime DB grants, SMTP and the optional isolated development seed are documented in [authentication](docs/security/AUTHENTICATION.md), with a [threat model](docs/security/THREAT_MODEL.md) and [additive auth schema](docs/database/AUTH_SCHEMA.md). Apply migrations 006–007 with the migrator before starting the API; use separate APP_DB_USER/APP_DB_PASSWORD runtime credentials. Run `npm run dev` locally or `npm run build` then `npm start` for compiled execution. Both API and Angular must use the same browser origin.
 
 ## Prerequisites and local setup
 
@@ -16,7 +18,7 @@ npm ci
 npm run check
 ```
 
-An administrator must provision an **empty** local `livora_dev` schema using utf8mb4/utf8mb4_0900_as_ci, and a dedicated schema-scoped migration user. See [migration plan](docs/database/MIGRATION_PLAN.md) for privileges and production safety. Copy `.env.example` to `.env`, replace the password locally and set connection details. Never commit it. Remote connections require `DB_TLS_CA_FILE` with certificate verification.
+An administrator must provision an **empty** isolated local `livora_dev_local` schema using utf8mb4/utf8mb4_0900_as_ci, and a dedicated schema-scoped migration user. See [migration plan](docs/database/MIGRATION_PLAN.md) for privileges and production safety. Copy `.env.example` to `.env`, replace the password locally and set connection details. Never commit it. Remote connections require `DB_TLS_CA_FILE` with certificate verification.
 
 ```sh
 npm run db:validate
@@ -42,7 +44,7 @@ To run integration tests, separately provision a **new, empty loopback** schema 
 npm run test:db
 ```
 
-CI provisions a fresh MySQL service and test schema. Its workflow configuration is included; hosted CI has not run until GitHub executes it. There are no API `dev`/`start` scripts or frontend build yet because those features are outside Step 1.
+Integration tests additionally require explicit APP_DB_USER, APP_DB_PASSWORD and DB_TEST_ADMIN_PASSWORD for the isolated service. The guarded test provisioner grants restricted runtime privileges after migration and verifies denied DDL, finance reads and role/audit writes. CI uses disposable service credentials. Administrator settings are test-only and never consumed by the server.
 
 CI uses `npm audit`, weekly Dependabot updates and a checksum-verified, version-pinned Gitleaks binary to scan repository history locally. No paid scanning account or source-uploading service is required. Local secret scanning should include changed/untracked nonignored source files as well as Git history.
 
@@ -59,4 +61,4 @@ CI uses `npm audit`, weekly Dependabot updates and a checksum-verified, version-
 
 Stored instants use UTC `DATETIME(6)` with UTC DB sessions. Display in society timezone (`Asia/Kolkata` by default); `DATE` fields are society-local calendar dates. Financial DECIMAL and BIGINT values remain strings at JavaScript boundaries. Completed financial and audit records are append-only, with explicit adjustment/reversal records.
 
-Future API modules will use thin controllers, services and parameterized repositories under `/api/v1`. Authentication, authorization, support access, resident flows, billing calculations and UI remain later steps. The schema's tenant constraints supplement those required backend checks.
+Authentication now uses thin Express handlers, services and parameterized repositories under `/api/v1`. Support access, resident flows and billing calculations remain later steps. The schema's tenant constraints supplement server session/membership/permission checks.

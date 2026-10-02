@@ -10,6 +10,7 @@ import { migrate, openDatabase, readHistory, schemaTables } from '../src/databas
 import { createFixture, insert } from './fixtures.js';
 import type { SqlValue } from './fixtures.js';
 import { assertTenantSchema, assertUtcTimestamps } from './schema-contract.js';
+import { authIntegration } from './auth.integration.js';
 
 interface ValueRow extends RowDataPacket {
   value: string | number;
@@ -48,9 +49,9 @@ void test('MySQL 8.4 schema and security invariants on an empty disposable schem
           migrate(db, migrations, process.env.DB_NAME ?? ''),
           migrate(other, migrations, process.env.DB_NAME ?? ''),
         ]);
-        assert.equal(applied[0] + applied[1], 5);
+        assert.equal(applied[0] + applied[1], migrations.length);
         assert.equal(await migrate(db, migrations, process.env.DB_NAME ?? ''), 0);
-        assert.equal((await readHistory(db)).length, 5);
+        assert.equal((await readHistory(db)).length, migrations.length);
       } finally {
         await other.end();
       }
@@ -58,7 +59,7 @@ void test('MySQL 8.4 schema and security invariants on an empty disposable schem
 
     assert.equal(
       (await readHistory(db)).filter((entry) => entry.status === 'APPLIED').length,
-      5,
+      migrations.length,
       'Do not run fixtures on a partially migrated schema',
     );
 
@@ -512,6 +513,9 @@ void test('MySQL 8.4 schema and security invariants on an empty disposable schem
           [original.checksum],
         );
       }
+    });
+    await suite.test('authentication and authorization HTTP security', async (authSuite) => {
+      await authIntegration(authSuite, db);
     });
   } finally {
     await db.end();

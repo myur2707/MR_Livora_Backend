@@ -11,7 +11,19 @@ interface TimeRow extends RowDataPacket {
   utc_now: string;
 }
 
-const globalTables = ['societies', 'persons', 'users', 'permissions', '_schema_migrations'];
+// Global identity infrastructure is separate from tenant-owned business resources.
+const globalTables = [
+  'societies',
+  'persons',
+  'users',
+  'permissions',
+  '_schema_migrations',
+  'auth_sessions',
+  'password_reset_tokens',
+  'platform_user_roles',
+  'auth_rate_limits',
+  'auth_events',
+];
 const placeholders = globalTables.map(() => '?').join(', ');
 const tenantPredicate = `t.TABLE_SCHEMA = DATABASE()
   AND t.TABLE_TYPE = 'BASE TABLE' AND t.TABLE_NAME NOT IN (${placeholders})`;

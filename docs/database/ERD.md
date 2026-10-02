@@ -1,5 +1,7 @@
 # Database architecture
 
+The [Step 3 auth schema extension](AUTH_SCHEMA.md) adds sessions, reset tokens, explicit platform grants and global security infrastructure to this preserved domain ERD.
+
 One MySQL 8.4 schema, modular monolith, no ORM. InnoDB and utf8mb4_0900_as_ci are explicit for all domain tables. The initial 27 tables support 1–5 pilots without separate databases or infrastructure per society.
 
 ```mermaid

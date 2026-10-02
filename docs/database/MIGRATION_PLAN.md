@@ -10,7 +10,7 @@
 | 004     | Notices, private complaints and tenant audit logs                                                       |
 | 005     | 17 append-only / issued-bill guards                                                                     |
 
-27 domain tables plus `_schema_migrations`. No business seed DML, drops, cascade deletes or down commands. The five migrations are an initial additive baseline and are committed SQL, not generated at runtime.
+The initial five migrations contain 27 domain tables plus `_schema_migrations`. Step 3 migration 006 adds five global identity/security tables and two audit triggers, and 007 adds automatic account credential revocation; see [auth schema](AUTH_SCHEMA.md) for dictionary, FKs and safe rollout. There are no drops, cascade deletes or automatic down commands. Migration SQL is committed, not generated at runtime.
 
 ## Provisioning and privileges
 

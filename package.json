@@ -7,12 +7,15 @@
     "node": ">=24 <25"
   },
   "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "node dist/server.js",
+    "auth:seed": "tsx src/auth/dev-seed.ts",
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "format": "prettier --write .",
     "check-format": "prettier --check .",
-    "test": "tsx --test tests/migrations.test.ts",
+    "test": "tsx --test tests/migrations.test.ts tests/auth.unit.test.ts",
     "test:db": "tsx --test tests/database.integration.test.ts",
     "db:validate": "tsx src/database/cli.ts validate",
     "db:status": "tsx src/database/cli.ts status",
@@ -20,11 +23,17 @@
     "check": "npm run check-format && npm run lint && npm run typecheck && npm test && npm run build && npm run db:validate"
   },
   "dependencies": {
-    "mysql2": "3.24.5"
+    "argon2": "0.45.1",
+    "express": "5.2.1",
+    "mysql2": "3.24.5",
+    "nodemailer": "10.0.13",
+    "zod": "4.6.5"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "@types/express": "5.0.6",
     "@types/node": "24.19.1",
+    "@types/nodemailer": "8.0.2",
     "eslint": "10.11.0",
     "prettier": "3.9.9",
     "tsx": "4.23.15",

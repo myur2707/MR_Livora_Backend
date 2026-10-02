@@ -1,5 +1,7 @@
 # Data dictionary
 
+Step 3's five global identity/security tables are documented in the [auth schema extension](AUTH_SCHEMA.md); the 27 domain tables below are preserved.
+
 The committed migration SQL is authoritative for defaults, generated expressions, keys and CHECK predicates. This dictionary covers all 27 domain tables. `NULL` means optional; `NOT NULL` means required. All table IDs and tenant/resource references are BIGINT UNSIGNED. All currency/rates are DECIMAL(12,2); quantities/areas use DECIMAL(10,2). Primary IDs are AUTO_INCREMENT, and creation/modified timestamps use UTC-session CURRENT_TIMESTAMP(6).
 
 `persons`, `users` and `permissions` are global. `societies` is the tenant directory. Every other table has non-null society_id and tenant relationship constraints. Foreign keys never cascade. See [constraints](CONSTRAINTS_AND_INDEXES.md) for scope, uniqueness and service-enforced cross-row invariants.
