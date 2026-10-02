@@ -107,11 +107,15 @@ export async function authIntegration(suite: TestContext, db: Connection): Promi
   const fresh = (): AuthClient => new AuthClient(base, config.origin);
   try {
     await suite.test(
-      'runtime account cannot perform DDL, grant roles, read finance or modify audits',
+      'runtime account cannot perform DDL, grant roles, rewrite money, delete bills or modify audits',
       async () => {
         for (const sql of [
           'CREATE TABLE unauthorized_runtime_table (id INT)',
-          'SELECT * FROM bills',
+          'UPDATE payments SET amount=amount WHERE 1=0',
+          'UPDATE bills SET total_amount=total_amount WHERE 1=0',
+          'DELETE FROM bills WHERE 1=0',
+          'UPDATE audit_logs SET action=action WHERE 1=0',
+          'DELETE FROM audit_logs WHERE 1=0',
           'DELETE FROM platform_user_roles',
           'UPDATE users SET status = status',
           'SELECT * FROM auth_events',

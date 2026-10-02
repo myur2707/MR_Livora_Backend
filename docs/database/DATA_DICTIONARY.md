@@ -507,3 +507,5 @@ Append-only tenant security/financial evidence with minimal safe metadata.
 | applied_at | DATETIME(6) NULL                         | UTC completion marker                    |
 
 The runtime application must have no grants on metadata. The runner owns status updates. Token/PII values never belong in this table.
+
+Step 7 adds immutable charge metadata, period kinds, generation idempotency, bill snapshots, audited discount policy and one-time event consumption. See [billing schema](BILLING_SCHEMA.md) for all seven supporting tables, composite foreign keys, indexes and guards, and [approved billing rules](../billing/STEP_7_BILLING.md) for full monthly amounts without proration and informational arrears. Applied migrations 001?011 and existing financial history remain unchanged.

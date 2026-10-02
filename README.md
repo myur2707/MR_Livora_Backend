@@ -2,7 +2,9 @@
 
 Smart Community Management — Connect. Manage. Live Better.
 
-Steps 1, 3–6 implement the shared-schema database, safe migrations, authentication/authorization, Platform Admin society onboarding with committee verification, property/resident management with reviewed CSV imports, and resident invitations/registration approval. Financial APIs remain later steps. `../MR_Livora_Frontend` is the separate Angular PWA repository. Follow [AGENTS.md](AGENTS.md) before further work.
+Steps 1, 3–7 implement the shared-schema database, safe migrations, authentication/authorization, society onboarding, property/resident management, verified resident access and maintenance configuration/bill generation. `../MR_Livora_Frontend` is the separate Angular PWA repository. Follow [AGENTS.md](AGENTS.md) before further work.
+
+Step 7's [billing policies and API](docs/billing/STEP_7_BILLING.md), [additive schema](docs/database/BILLING_SCHEMA.md) and [threat model](docs/security/BILLING.md) cover exact money, full monthly charges without proration, scoped immutable configuration versions, reviewed generation, discounts, idempotency and outstanding reports. Apply migration 012, run `npm run db:billing-permissions` with the migrator and provision its narrow runtime grants before starting the new API. Managed `local:stop` / `local:start` upgrades existing local data without resetting accounts. Payment recording remains a later step.
 
 Authentication setup, API contracts, runtime DB grants, SMTP and the optional isolated development seed are documented in [authentication](docs/security/AUTHENTICATION.md), with a [threat model](docs/security/THREAT_MODEL.md) and [additive auth schema](docs/database/AUTH_SCHEMA.md). Apply migrations 006–007 with the migrator before starting the API; use separate APP_DB_USER/APP_DB_PASSWORD runtime credentials. Run `npm run dev` locally or `npm run build` then `npm start` for compiled execution. Both API and Angular must use the same browser origin.
 

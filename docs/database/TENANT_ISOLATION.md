@@ -43,3 +43,5 @@ MySQL shared-schema tables have no automatic row-level security here. A compromi
 Runtime grants must be explicit per table. The application cannot ALTER/DROP/CREATE/TRIGGER/GRANT or access _schema_migrations. It may INSERT/SELECT append-only financial/audit tables, and may UPDATE only mutable tables required by a reviewed module. Ordinary application users never directly access MySQL.
 
 PWA caching, cookie sessions/CSRF, request validation, rate limits, file controls and private resident read scopes are future API/PWA gates; Step 1 introduces no endpoints, caches or uploads.
+
+Step 7 adds immutable charge metadata, period kinds, generation idempotency, bill snapshots, audited discount policy and one-time event consumption. See [billing schema](BILLING_SCHEMA.md) for all seven supporting tables, composite foreign keys, indexes and guards, and [approved billing rules](../billing/STEP_7_BILLING.md) for full monthly amounts without proration and informational arrears. Applied migrations 001?011 and existing financial history remain unchanged.

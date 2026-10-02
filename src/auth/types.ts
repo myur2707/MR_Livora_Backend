@@ -9,13 +9,21 @@ export const permissions = [
   'society.dashboard.read',
   'society.finance.read',
   'society.finance.record',
+  'society.finance.configure',
+  'society.finance.generate',
+  'society.finance.discount',
   'society.members.manage',
 ] as const;
 export type Permission = (typeof permissions)[number];
 export const roleCapabilities: Record<TenantRole, readonly Permission[]> = {
   COMMITTEE_ADMIN: permissions,
   COMMITTEE_MEMBER: ['society.dashboard.read'],
-  ACCOUNTANT: ['society.dashboard.read', 'society.finance.read', 'society.finance.record'],
+  ACCOUNTANT: [
+    'society.dashboard.read',
+    'society.finance.read',
+    'society.finance.record',
+    'society.finance.generate',
+  ],
   RESIDENT: ['society.dashboard.read'],
 };
 export interface Membership {

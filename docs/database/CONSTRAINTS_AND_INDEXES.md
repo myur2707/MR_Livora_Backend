@@ -58,3 +58,5 @@ MySQL CHECKs cannot contain cross-row aggregates or subqueries. These boundaries
 6. Lock payment/bills for a full reversal; preserve allocations/receipt and append one reversal plus audit. Outstanding computations exclude reversed payments. Credit corrections cannot make outstanding invalid; enforce it under the same bill locks.
 
 Payment references are indexed **not globally unique**: bank references/cheques may legitimately repeat under different methods or institutions. Later payment services must define a normalized reference policy, flag suspicious duplicates and verify external payments. Idempotency keys protect request retries; a reference alone is not proof of payment.
+
+Step 7 adds immutable charge metadata, period kinds, generation idempotency, bill snapshots, audited discount policy and one-time event consumption. See [billing schema](BILLING_SCHEMA.md) for all seven supporting tables, composite foreign keys, indexes and guards, and [approved billing rules](../billing/STEP_7_BILLING.md) for full monthly amounts without proration and informational arrears. Applied migrations 001?011 and existing financial history remain unchanged.

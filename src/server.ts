@@ -19,6 +19,8 @@ import { ResidentAccounts } from './resident-access/accounts.js';
 import { ResidentIdentity } from './resident-access/identity.js';
 import { ResidentInvitations } from './resident-access/invitations.js';
 import { ResidentRequests } from './resident-access/requests.js';
+import { BillingAccess } from './billing/access.js';
+import { billingModule } from './billing/router.js';
 
 if (existsSync('.env')) loadEnvFile('.env');
 const log = (code: string, requestId: string): void => {
@@ -61,6 +63,7 @@ try {
     { service, invitations },
     { service: property, occupancy, imports },
     residentAccess,
+    billingModule(new BillingAccess(database)),
   ).listen(config.PORT, config.HOST, () => console.info('SocietyEase API ready.'));
   server.requestTimeout = 30000;
   server.headersTimeout = 15000;

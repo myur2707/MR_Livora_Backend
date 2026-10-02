@@ -70,3 +70,5 @@ All instants are UTC `DATETIME(6)`; session time zone must be `+00:00`. Do not a
 No cascade deletes. Archive resident profiles, buildings/flats, roles/charges and societies; suspend/deactivate accounts and memberships. See [migration policy](MIGRATION_PLAN.md) for financial retention and privacy decisions.
 
 Step 4 adds initial committee onboarding without changing the baseline. See [additive onboarding schema](ONBOARDING_SCHEMA.md) and [API, privacy and verification gates](../security/SOCIETY_ONBOARDING.md).
+
+Step 7 adds immutable charge metadata, period kinds, generation idempotency, bill snapshots, audited discount policy and one-time event consumption. See [billing schema](BILLING_SCHEMA.md) for all seven supporting tables, composite foreign keys, indexes and guards, and [approved billing rules](../billing/STEP_7_BILLING.md) for full monthly amounts without proration and informational arrears. Applied migrations 001?011 and existing financial history remain unchanged.
