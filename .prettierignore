@@ -1,7 +1,0 @@
-node_modules/
-dist/
-coverage/
-.local-db/
-.local-tools/
-package-lock.json
-database/migrations/*.sql
