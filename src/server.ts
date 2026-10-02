@@ -1,3 +1,7 @@
+import { PropertyAccess } from './property/access.js';
+import { PropertyService } from './property/service.js';
+import { OccupancyService } from './property/occupancies.js';
+import { ImportService } from './property/imports/service.js';
 import { existsSync } from 'node:fs';
 import { isIP } from 'node:net';
 import { loadEnvFile } from 'node:process';
@@ -35,15 +39,22 @@ try {
     { send: (email, link, name) => mailer.sendInvitation(email, link, name) },
     invitationQueue,
   );
-  const server = createApp(auth, log, proxy, { service, invitations }).listen(
-    config.PORT,
-    config.HOST,
-    () => console.info('SocietyEase API ready.'),
-  );
+  const property = new PropertyService(new PropertyAccess(database));
+  const occupancy = new OccupancyService(property);
+  const imports = new ImportService(property, occupancy);
+  const server = createApp(
+    auth,
+    log,
+    proxy,
+    { service, invitations },
+    { service: property, occupancy, imports },
+  ).listen(config.PORT, config.HOST, () => console.info('SocietyEase API ready.'));
   server.requestTimeout = 30000;
   server.headersTimeout = 15000;
   const maintenance = setInterval(() => {
-    void repository.maintenance(Date.now()).catch(() => log('MAINTENANCE_FAILED', 'system'));
+    void Promise.all([repository.maintenance(Date.now()), imports.expire()]).catch(() =>
+      log('MAINTENANCE_FAILED', 'system'),
+    );
   }, 60000);
   maintenance.unref();
   const shutdown = (): void => {

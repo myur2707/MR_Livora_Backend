@@ -1,5 +1,7 @@
 # Resident onboarding data contract
 
+Step 5 adds tenant resident references, private CSV review batches/rows and immutable occupancy history without changing this baseline. See [property schema and constraints](PROPERTY_SCHEMA.md) and [management/import security rules](../security/PROPERTY_MANAGEMENT.md).
+
 This document defines future workflows; Step 1 implements their tables and constraints only. No registration/invitation APIs, login or automatic activation are implemented.
 
 ## Committee-created or imported resident without login

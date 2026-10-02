@@ -1,5 +1,7 @@
 # Data dictionary
 
+Step 5 adds tenant resident references, private CSV review batches/rows and immutable occupancy history without changing this baseline. See [property schema and constraints](PROPERTY_SCHEMA.md) and [management/import security rules](../security/PROPERTY_MANAGEMENT.md).
+
 Step 4 additions are documented in [onboarding schema](ONBOARDING_SCHEMA.md); the baseline below is preserved.
 
 Step 3's five global identity/security tables are documented in the [auth schema extension](AUTH_SCHEMA.md); the 27 domain tables below are preserved.

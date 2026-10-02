@@ -30,7 +30,13 @@ export class Security {
     }
     if (request.get('sec-fetch-site') === 'cross-site')
       throw new ApiError(403, 'ORIGIN_REJECTED', 'Request origin is not allowed.');
+    const propertyList =
+      /^\/society\/(?:buildings|flats|persons|imports)$/.test(request.path) ||
+      /^\/society\/(?:flats\/[1-9][0-9]*\/occupancies|imports\/[1-9][0-9]*\/rows)$/.test(
+        request.path,
+      );
     const paginated =
+      propertyList ||
       request.path === '/platform/societies' ||
       /^\/(?:platform|onboarding)\/societies\/[1-9][0-9]*\/structure$/.test(request.path) ||
       /^\/onboarding\/societies\/[1-9][0-9]*\/(?:residents|maintenance)$/.test(request.path);

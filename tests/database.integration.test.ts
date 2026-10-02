@@ -1,3 +1,4 @@
+import { propertyIntegration } from './property.integration.js';
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
@@ -522,6 +523,12 @@ void test('MySQL 8.4 schema and security invariants on an empty disposable schem
       'platform onboarding and committee verification security',
       async (onboardingSuite) => {
         await onboardingIntegration(onboardingSuite, db);
+      },
+    );
+    await suite.test(
+      'property management, CSV imports and tenant boundaries',
+      async (propertySuite) => {
+        await propertyIntegration(propertySuite, db);
       },
     );
   } finally {

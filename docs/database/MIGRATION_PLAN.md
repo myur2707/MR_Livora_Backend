@@ -1,5 +1,7 @@
 # Safe migration and retention plan
 
+Step 5 adds tenant resident references, private CSV review batches/rows and immutable occupancy history without changing this baseline. See [property schema and constraints](PROPERTY_SCHEMA.md) and [management/import security rules](../security/PROPERTY_MANAGEMENT.md).
+
 ## Ordered baseline
 
 | Version | Content                                                                                                 |

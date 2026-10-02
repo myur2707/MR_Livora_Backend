@@ -6,6 +6,7 @@ import type { RowDataPacket } from 'mysql2/promise';
 import { z } from 'zod';
 import { openDatabase, migrate } from './runner.js';
 import { loadMigrations } from './migrations.js';
+import { grantPropertyRuntime } from './property-grants.js';
 import { grantOnboardingRuntime } from './onboarding-grants.js';
 async function upgrade(): Promise<void> {
   const dataRoot = resolve('.local-db/manual');
@@ -49,6 +50,7 @@ async function upgrade(): Promise<void> {
       await db.end();
     }
     await grantOnboardingRuntime(admin, 'livora_dev_manual', 'livora_manual_app', '127.0.0.1');
+    await grantPropertyRuntime(admin, 'livora_dev_manual', 'livora_manual_app', '127.0.0.1');
     console.info('Managed local runtime grants updated; existing data and accounts retained.');
   } finally {
     await admin.end();

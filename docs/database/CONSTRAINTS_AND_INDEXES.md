@@ -1,5 +1,7 @@
 # Constraints, indexes and concurrent writes
 
+Step 5 adds tenant resident references, private CSV review batches/rows and immutable occupancy history without changing this baseline. See [property schema and constraints](PROPERTY_SCHEMA.md) and [management/import security rules](../security/PROPERTY_MANAGEMENT.md).
+
 Every table uses an explicit primary key. Every society-owned table has `society_id → societies.id`, plus `UNIQUE(society_id,id)` so referenced composite keys are genuinely unique under MySQL 8.4. Tenant-to-tenant references always include society_id. Nullable relationships intentionally permit no relation; a non-null resource must be in that society.
 
 All foreign keys use default **RESTRICT/NO ACTION** (immediate InnoDB checks); none cascade or set-null. This is equivalent to restrictive deletion, and omitting explicit referential clauses avoids MySQL CHECK restrictions on columns participating in foreign-key actions. See [MySQL foreign keys](https://dev.mysql.com/doc/refman/8.4/en/create-table-foreign-keys.html) and [CHECK constraints](https://dev.mysql.com/doc/refman/8.4/en/create-table-check-constraints.html).

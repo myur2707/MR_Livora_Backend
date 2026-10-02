@@ -19,7 +19,7 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "check-format": "prettier --check .",
-    "test": "tsx --test tests/migrations.test.ts tests/auth.unit.test.ts tests/onboarding.unit.test.ts",
+    "test": "tsx --test tests/migrations.test.ts tests/auth.unit.test.ts tests/onboarding.unit.test.ts tests/property.unit.test.ts",
     "test:db": "tsx --test tests/database.integration.test.ts",
     "db:validate": "tsx src/database/cli.ts validate",
     "db:status": "tsx src/database/cli.ts status",
@@ -28,6 +28,7 @@
   },
   "dependencies": {
     "argon2": "0.45.1",
+    "csv-parse": "7.0.3",
     "express": "5.2.1",
     "mysql2": "3.24.5",
     "nodemailer": "10.0.13",

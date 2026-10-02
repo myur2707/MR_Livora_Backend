@@ -1,4 +1,5 @@
 import express from 'express';
+import { propertyRouter, type PropertyModule } from '../property/router.js';
 import { z } from 'zod';
 import type { AuthService } from '../auth/service.js';
 import { ApiError, errorHandler } from './errors.js';
@@ -37,17 +38,22 @@ export function createApp(
   log: SafeLogger,
   trustedProxy?: string,
   onboarding?: { service: OnboardingService; invitations: InvitationService },
+  property?: PropertyModule,
 ) {
   const app = express();
   const security = new Security(auth);
   app.disable('x-powered-by');
   if (trustedProxy) app.set('trust proxy', trustedProxy);
-  app.use(
-    '/api/v1',
-    security.headers,
-    express.json({ limit: '16kb', strict: true }),
-    security.load,
-  );
+  app.use('/api/v1', security.headers, security.load);
+  if (property)
+    app.post(
+      '/api/v1/society/imports/preview',
+      security.authenticated,
+      security.tenant('society.members.manage'),
+      express.json({ limit: '400kb', strict: true }),
+      (_request, _response, next) => next(),
+    );
+  app.use('/api/v1', express.json({ limit: '16kb', strict: true }));
   const router = express.Router();
   router.get('/auth/csrf', async (request, response) => {
     let raw = security.rawToken(request);
@@ -146,6 +152,7 @@ export function createApp(
   app.use('/api/v1', router);
   if (onboarding)
     app.use('/api/v1', onboardingRouter(security, onboarding.service, onboarding.invitations));
+  if (property) app.use('/api/v1', propertyRouter(security, property));
   app.use(() => {
     throw new ApiError(404, 'NOT_FOUND', 'Resource not found.');
   });
