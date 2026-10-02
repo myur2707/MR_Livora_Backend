@@ -47,9 +47,9 @@ Open the ignored local file **.local-db/manual/TEST_ACCOUNTS.md** for the random
 
 All accounts are synthetic and share one randomly generated initial **local-only** password. Resetting a password changes only that account. The credentials file records initial passwords and is not automatically rewritten after resets.
 
-The fixture also creates building A / flat 101 with a person-only owner, a current person-only tenant and a historical tenant. Inspect these through a local database client using the migrator credentials in .env; no resident/flat UI exists yet. Runtime credentials cannot read financial tables. Platform APIs never expose resident names or charge rates.
+The fixture also creates building A / flat 101 with a person-only owner, a current person-only tenant and a historical tenant. Log in as the Green Meadows committee admin and open the Buildings, Flats and Residents routes to inspect these records and occupancy history. Runtime credentials cannot read financial tables. Platform APIs never expose resident names or charge rates.
 
-For the new society wizard, follow [Step 4 manual testing](../../../MR_Livora_Frontend/docs/STEP_4_ONBOARDING.md). A stop/start applies additive migration 008 and its narrow local runtime grants without changing existing data/accounts.
+For the society wizard, follow [Step 4 manual testing](../../../MR_Livora_Frontend/docs/STEP_4_ONBOARDING.md); for directories and imports, follow [Step 5](../../../MR_Livora_Frontend/docs/STEP_5_PROPERTY_MANAGEMENT.md). A stop/start applies pending additive migrations through 009 and their narrow local runtime grants without replacing existing data/accounts.
 
 ## Manual checklist
 
@@ -86,7 +86,13 @@ If a port is occupied by an unrelated service, the runner refuses to stop it. In
 
 The managed frontend serves a production build. Restart the setup after code changes to rebuild it. The separate standard `npm run dev` workflow supports live editing; run one frontend server on port 4200 at a time.
 
-## Verification on 2026-10-02
+## Current manual verification
+
+The [Step 2/3 checklist report](STEP_2_3_MANUAL_VERIFICATION.md) records **115 passing automated tests**, real browser/API and local TLS SMTP reset checks, an actual Chrome PWA installation/standalone launch, the table keyboard/mobile fix, and the remaining deployed-HTTPS cookie check. The installed app uses an isolated Chrome profile; the ignored frontend `.local-tools/Open-SocietyEase-PWA.ps1` reopens it while services are running. Initial manual-account passwords were preserved.
+
+## Initial local setup verification on 2026-10-02
+
+The following is the original local-setup snapshot, before Steps 4–5 and the later checklist verification.
 
 Both repositories passed format, lint, strict typecheck and production build. All 74 automated tests passed: 11 backend offline tests, 35 fresh-MySQL integrity/auth tests, 15 Angular unit tests, 3 local proxy tests and 10 browser tests. Dependency audits reported zero vulnerabilities, and the local source secret scan found no leaks.
 

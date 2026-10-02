@@ -1,5 +1,7 @@
 # Step 3 verification — 2026-10-02
 
+This is the original Step 3 implementation snapshot. See [the later Step 2/3 manual verification](STEP_2_3_MANUAL_VERIFICATION.md) for the current application, real local SMTP delivery, installed PWA and remaining deployed-HTTPS check.
+
 Scope: authentication/authorization only. Existing domain migrations 001–005 are unchanged; 006 adds identity infrastructure and immutable audit guards, 007 revokes sessions/reset links on account disablement/password changes. No business API/UI or destructive migration was added.
 
 | Check                                                   | Executed result                                                                                                                                                                                |
