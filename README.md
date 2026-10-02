@@ -8,6 +8,8 @@ Authentication setup, API contracts, runtime DB grants, SMTP and the optional is
 
 ## Prerequisites and local setup
 
+For the configured Windows workspace, see [local manual testing](docs/testing/LOCAL_TESTING.md). Run `npm run local:start` to start both projects, the isolated database and reset-email inbox; `local:setup` prepares a new workspace once, and `local:stop` retains its data. Generated test credentials are in ignored `.local-db/manual/TEST_ACCOUNTS.md`.
+
 - Node **24 LTS** and its bundled npm. `.node-version` selects the major; dependency versions are exact and `package-lock.json` is included for reproducible installs. The inspected machine had Node 20.18.1; portable Node 24 was used for checks because Node 20 is EOL. No existing project packages were upgraded.
 - **MySQL 8.4 LTS** with InnoDB and `STRICT_TRANS_TABLES`. This supported MySQL 8 line has enforced CHECK constraints. MariaDB is not a drop-in validation substitute. Integration validation targets 8.4.8.
 

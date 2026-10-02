@@ -8,6 +8,10 @@
   },
   "scripts": {
     "dev": "tsx watch src/server.ts",
+    "local:setup": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/local.ps1 setup",
+    "local:start": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/local.ps1 start",
+    "local:stop": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/local.ps1 stop",
+    "local:status": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/local.ps1 status",
     "start": "node dist/server.js",
     "auth:seed": "tsx src/auth/dev-seed.ts",
     "build": "tsc -p tsconfig.build.json",
