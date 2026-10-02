@@ -141,3 +141,14 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Database tooling and sensitive local artifacts
+.local-tools/
+.local-db/
+*.pem
+*.key
+*.pfx
+*.p12
+*.dump
+*.sql.gz
+*.bak
