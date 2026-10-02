@@ -2,7 +2,7 @@
 
 Smart Community Management — Connect. Manage. Live Better.
 
-Steps 1, 3, 4 and 5 implement the shared-schema database, safe migrations, authentication/authorization, Platform Admin society onboarding with committee verification, and society property/resident management with reviewed CSV imports. Financial APIs remain later steps. `../MR_Livora_Frontend` is the separate Angular PWA repository. Follow [AGENTS.md](AGENTS.md) before further work.
+Steps 1, 3–6 implement the shared-schema database, safe migrations, authentication/authorization, Platform Admin society onboarding with committee verification, property/resident management with reviewed CSV imports, and resident invitations/registration approval. Financial APIs remain later steps. `../MR_Livora_Frontend` is the separate Angular PWA repository. Follow [AGENTS.md](AGENTS.md) before further work.
 
 Authentication setup, API contracts, runtime DB grants, SMTP and the optional isolated development seed are documented in [authentication](docs/security/AUTHENTICATION.md), with a [threat model](docs/security/THREAT_MODEL.md) and [additive auth schema](docs/database/AUTH_SCHEMA.md). Apply migrations 006–007 with the migrator before starting the API; use separate APP_DB_USER/APP_DB_PASSWORD runtime credentials. Run `npm run dev` locally or `npm run build` then `npm start` for compiled execution. Both API and Angular must use the same browser origin.
 
@@ -11,6 +11,8 @@ Step 4 API, criteria, privacy, concurrency and rollout are documented in [societ
 Step 5 contracts, import/privacy controls and archive rules are in [property management](docs/security/PROPERTY_MANAGEMENT.md), with [additive migration 009](docs/database/PROPERTY_SCHEMA.md). Apply 009 and its column-specific runtime grants before starting the updated API.
 
 ## Prerequisites and local setup
+
+Step 6's [resident access contract and threat model](docs/security/RESIDENT_ACCESS.md) and [schema](docs/database/RESIDENT_ACCESS_SCHEMA.md) cover email verification, committee invitations and pending membership requests. Apply additive migrations 010–011 and their column-specific runtime grants before starting the updated API. Existing accounts and occupancy history are reused without identity merges. The [Step 6 verification report](docs/testing/STEP_6_VERIFICATION.md) records checks and retained local demonstrations.
 
 For the configured Windows workspace, see [local manual testing](docs/testing/LOCAL_TESTING.md). Run `npm run local:start` to start both projects, the isolated database and reset-email inbox; `local:setup` prepares a new workspace once, and `local:stop` retains its data. Generated test credentials are in ignored `.local-db/manual/TEST_ACCOUNTS.md`.
 
@@ -67,4 +69,4 @@ CI uses `npm audit`, weekly Dependabot updates and a checksum-verified, version-
 
 Stored instants use UTC `DATETIME(6)` with UTC DB sessions. Display in society timezone (`Asia/Kolkata` by default); `DATE` fields are society-local calendar dates. Financial DECIMAL and BIGINT values remain strings at JavaScript boundaries. Completed financial and audit records are append-only, with explicit adjustment/reversal records.
 
-Authentication now uses thin Express handlers, services and parameterized repositories under `/api/v1`. General support access, ongoing resident management and billing calculations remain later steps. The schema's tenant constraints supplement server session/membership/permission checks.
+Authentication and management use thin Express handlers, services and parameterized SQL under `/api/v1`. General support access and financial business APIs remain later steps. The schema's tenant constraints supplement server session/membership/permission checks.

@@ -1,5 +1,7 @@
 # Tenant isolation and Step 1 threat model
 
+Step 6's tenant identity links, approval permissions and global email verification boundary are documented in the [resident access threat model](../security/RESIDENT_ACCESS.md).
+
 Step 5 adds tenant resident references, private CSV review batches/rows and immutable occupancy history without changing this baseline. See [property schema and constraints](PROPERTY_SCHEMA.md) and [management/import security rules](../security/PROPERTY_MANAGEMENT.md).
 
 Assets: tenant resident contact/occupancy data, accounts, bills/collections/receipts, roles/grants, onboarding tokens, private complaints and audit history. Actors: unauthenticated applicant, resident, committee/accountant, explicitly scoped platform operator, migration operator and compromised runtime account. Boundaries: browser→future API, authenticated identity→active society, service→SQL, migration credentials→DDL, and global identity→tenant profile.

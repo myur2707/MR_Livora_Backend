@@ -23,6 +23,8 @@ const globalTables = [
   'platform_user_roles',
   'auth_rate_limits',
   'auth_events',
+  'resident_account_verifications',
+  'resident_account_events',
 ];
 const placeholders = globalTables.map(() => '?').join(', ');
 const tenantPredicate = `t.TABLE_SCHEMA = DATABASE()

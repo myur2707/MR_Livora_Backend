@@ -1,5 +1,7 @@
 # Data dictionary
 
+Step 6 tables and their fields are documented in the [resident access schema](RESIDENT_ACCESS_SCHEMA.md).
+
 Step 5 adds tenant resident references, private CSV review batches/rows and immutable occupancy history without changing this baseline. See [property schema and constraints](PROPERTY_SCHEMA.md) and [management/import security rules](../security/PROPERTY_MANAGEMENT.md).
 
 Step 4 additions are documented in [onboarding schema](ONBOARDING_SCHEMA.md); the baseline below is preserved.

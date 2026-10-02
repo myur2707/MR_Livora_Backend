@@ -1,5 +1,7 @@
 # Database architecture
 
+Step 6 adds verified resident access without rewriting existing identities or occupancy history. See the [resident access schema and ERD](RESIDENT_ACCESS_SCHEMA.md).
+
 Step 5 adds tenant resident references, private CSV review batches/rows and immutable occupancy history without changing this baseline. See [property schema and constraints](PROPERTY_SCHEMA.md) and [management/import security rules](../security/PROPERTY_MANAGEMENT.md).
 
 The [Step 3 auth schema extension](AUTH_SCHEMA.md) adds sessions, reset tokens, explicit platform grants and global security infrastructure to this preserved domain ERD.

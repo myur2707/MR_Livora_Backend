@@ -1,5 +1,7 @@
 # Constraints, indexes and concurrent writes
 
+See the [Step 6 constraints and identity links](RESIDENT_ACCESS_SCHEMA.md) and [resident access security contract](../security/RESIDENT_ACCESS.md) for invitation and approval concurrency.
+
 Step 5 adds tenant resident references, private CSV review batches/rows and immutable occupancy history without changing this baseline. See [property schema and constraints](PROPERTY_SCHEMA.md) and [management/import security rules](../security/PROPERTY_MANAGEMENT.md).
 
 Every table uses an explicit primary key. Every society-owned table has `society_id → societies.id`, plus `UNIQUE(society_id,id)` so referenced composite keys are genuinely unique under MySQL 8.4. Tenant-to-tenant references always include society_id. Nullable relationships intentionally permit no relation; a non-null resource must be in that society.

@@ -97,7 +97,8 @@ export class AuthRepository {
       `SELECT DISTINCT s.id,s.name,s.status FROM societies s
        JOIN society_onboarding o ON o.society_id=s.id
        JOIN society_memberships m ON m.society_id=s.id AND m.user_id=? AND m.status='ACTIVE' AND m.joined_at<=UTC_TIMESTAMP(6) AND m.ended_at IS NULL
-       JOIN society_persons sp ON sp.society_id=s.id AND sp.person_id=? AND sp.archived_at IS NULL
+       LEFT JOIN membership_person_links l ON l.society_id=m.society_id AND l.membership_id=m.id
+       JOIN society_persons sp ON sp.society_id=s.id AND sp.person_id=COALESCE(l.person_id,?) AND sp.archived_at IS NULL
        JOIN membership_roles mr ON mr.society_id=s.id AND mr.membership_id=m.id
        JOIN roles r ON r.society_id=s.id AND r.id=mr.role_id AND r.code='COMMITTEE_ADMIN' AND r.archived_at IS NULL
        JOIN role_permissions rp ON rp.society_id=s.id AND rp.role_id=r.id
@@ -127,7 +128,8 @@ export class AuthRepository {
       `SELECT m.society_id, m.id AS membership_id, s.name, r.code AS role_code, p.code AS permission_code
       FROM society_memberships m JOIN users u ON u.id = m.user_id AND u.status = 'ACTIVE'
       JOIN societies s ON s.id = m.society_id AND s.status = 'ACTIVE' AND s.archived_at IS NULL
-      JOIN society_persons sp ON sp.society_id = m.society_id AND sp.person_id = u.person_id AND sp.archived_at IS NULL
+      LEFT JOIN membership_person_links l ON l.society_id=m.society_id AND l.membership_id=m.id
+      JOIN society_persons sp ON sp.society_id = m.society_id AND sp.person_id = COALESCE(l.person_id,u.person_id) AND sp.archived_at IS NULL
       JOIN membership_roles mr ON mr.society_id = m.society_id AND mr.membership_id = m.id
       JOIN roles r ON r.society_id = mr.society_id AND r.id = mr.role_id AND r.archived_at IS NULL
       LEFT JOIN role_permissions rp ON rp.society_id = r.society_id AND rp.role_id = r.id

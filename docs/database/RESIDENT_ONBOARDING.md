@@ -2,7 +2,7 @@
 
 Step 5 adds tenant resident references, private CSV review batches/rows and immutable occupancy history without changing this baseline. See [property schema and constraints](PROPERTY_SCHEMA.md) and [management/import security rules](../security/PROPERTY_MANAGEMENT.md).
 
-This document defines future workflows; Step 1 implements their tables and constraints only. No registration/invitation APIs, login or automatic activation are implemented.
+This is the baseline data-contract design. Step 6 now implements resident invitations and pending registration approval; see [the current API/security contract](../security/RESIDENT_ACCESS.md) and [additive schema](RESIDENT_ACCESS_SCHEMA.md). Current invitations grant RESIDENT only, require a verified current occupancy and use explicit tenant identity links when an existing global account's Person differs. Read the general workflow below with those stricter implemented rules.
 
 ## Committee-created or imported resident without login
 

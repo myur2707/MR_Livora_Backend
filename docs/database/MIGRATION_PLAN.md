@@ -1,5 +1,7 @@
 # Safe migration and retention plan
 
+Step 6 adds migrations `010_resident_access.sql` and `011_resident_account_audit.sql`. See their [schema, grants and rollout guidance](RESIDENT_ACCESS_SCHEMA.md) and [security/retention contract](../security/RESIDENT_ACCESS.md). Existing migrations remain unchanged.
+
 Step 5 adds tenant resident references, private CSV review batches/rows and immutable occupancy history without changing this baseline. See [property schema and constraints](PROPERTY_SCHEMA.md) and [management/import security rules](../security/PROPERTY_MANAGEMENT.md).
 
 ## Ordered baseline

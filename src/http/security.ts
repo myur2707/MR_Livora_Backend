@@ -37,6 +37,11 @@ export class Security {
       );
     const paginated =
       propertyList ||
+      [
+        '/resident-access/requests',
+        '/society/resident-invitations',
+        '/society/registration-requests',
+      ].includes(request.path) ||
       request.path === '/platform/societies' ||
       /^\/(?:platform|onboarding)\/societies\/[1-9][0-9]*\/structure$/.test(request.path) ||
       /^\/onboarding\/societies\/[1-9][0-9]*\/(?:residents|maintenance)$/.test(request.path);

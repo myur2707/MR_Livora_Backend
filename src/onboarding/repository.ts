@@ -116,7 +116,8 @@ export class OnboardingRepository {
         db,
         `SELECT m.id FROM society_memberships m
     JOIN users u ON u.id=m.user_id AND u.status='ACTIVE'
-    JOIN society_persons sp ON sp.society_id=m.society_id AND sp.person_id=u.person_id AND sp.archived_at IS NULL
+    LEFT JOIN membership_person_links l ON l.society_id=m.society_id AND l.membership_id=m.id
+    JOIN society_persons sp ON sp.society_id=m.society_id AND sp.person_id=COALESCE(l.person_id,u.person_id) AND sp.archived_at IS NULL
     JOIN membership_roles mr ON mr.society_id=m.society_id AND mr.membership_id=m.id
     JOIN roles r ON r.society_id=mr.society_id AND r.id=mr.role_id AND r.code='COMMITTEE_ADMIN' AND r.archived_at IS NULL
     JOIN role_permissions rp ON rp.society_id=r.society_id AND rp.role_id=r.id
@@ -142,7 +143,8 @@ export class OnboardingRepository {
    (SELECT COUNT(*) FROM flats WHERE society_id=? AND archived_at IS NULL AND area_sq_ft IS NULL) AS missingAreas,
    (SELECT COUNT(*) FROM society_setup_invitations i JOIN users u ON u.id=i.accepted_by_user_id AND u.status='ACTIVE'
      JOIN society_memberships m ON m.society_id=i.society_id AND m.user_id=u.id AND m.status='ACTIVE' AND m.joined_at<=UTC_TIMESTAMP(6) AND m.ended_at IS NULL
-     JOIN society_persons sp ON sp.society_id=m.society_id AND sp.person_id=u.person_id AND sp.archived_at IS NULL
+     LEFT JOIN membership_person_links l ON l.society_id=m.society_id AND l.membership_id=m.id
+     JOIN society_persons sp ON sp.society_id=m.society_id AND sp.person_id=COALESCE(l.person_id,u.person_id) AND sp.archived_at IS NULL
      JOIN membership_roles mr ON mr.society_id=m.society_id AND mr.membership_id=m.id
      JOIN roles r ON r.society_id=mr.society_id AND r.id=mr.role_id AND r.code='COMMITTEE_ADMIN' AND r.archived_at IS NULL
      JOIN role_permissions rp ON rp.society_id=r.society_id AND rp.role_id=r.id JOIN permissions p ON p.id=rp.permission_id AND p.code='society.members.manage'

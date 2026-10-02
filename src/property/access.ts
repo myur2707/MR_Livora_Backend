@@ -48,7 +48,7 @@ export class PropertyAccess {
     if (!society) throw new ApiError(403, 'ACCESS_DENIED', 'Access is not permitted.');
     const members = await rows<RowDataPacket & { id: string }>(
       db,
-      "SELECT m.id FROM society_memberships m JOIN users u ON u.id=m.user_id AND u.status='ACTIVE' JOIN society_persons sp ON sp.society_id=m.society_id AND sp.person_id=u.person_id AND sp.archived_at IS NULL JOIN membership_roles mr ON mr.society_id=m.society_id AND mr.membership_id=m.id JOIN roles r ON r.society_id=mr.society_id AND r.id=mr.role_id AND r.code='COMMITTEE_ADMIN' AND r.archived_at IS NULL JOIN role_permissions rp ON rp.society_id=r.society_id AND rp.role_id=r.id JOIN permissions p ON p.id=rp.permission_id AND p.code='society.members.manage' WHERE m.society_id=? AND m.user_id=? AND m.status='ACTIVE' AND m.joined_at<=? AND m.ended_at IS NULL FOR SHARE",
+      "SELECT m.id FROM society_memberships m JOIN users u ON u.id=m.user_id AND u.status='ACTIVE' LEFT JOIN membership_person_links l ON l.society_id=m.society_id AND l.membership_id=m.id JOIN society_persons sp ON sp.society_id=m.society_id AND sp.person_id=COALESCE(l.person_id,u.person_id) AND sp.archived_at IS NULL JOIN membership_roles mr ON mr.society_id=m.society_id AND mr.membership_id=m.id JOIN roles r ON r.society_id=mr.society_id AND r.id=mr.role_id AND r.code='COMMITTEE_ADMIN' AND r.archived_at IS NULL JOIN role_permissions rp ON rp.society_id=r.society_id AND rp.role_id=r.id JOIN permissions p ON p.id=rp.permission_id AND p.code='society.members.manage' WHERE m.society_id=? AND m.user_id=? AND m.status='ACTIVE' AND m.joined_at<=? AND m.ended_at IS NULL FOR SHARE",
       [societyId, userId, sqlTime(this.clock())],
     );
     const membershipId = members[0]?.id;

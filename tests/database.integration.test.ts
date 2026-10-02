@@ -1,4 +1,5 @@
 import { propertyIntegration } from './property.integration.js';
+import { residentAccessIntegration } from './resident-access.integration.js';
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
@@ -450,13 +451,13 @@ void test('MySQL 8.4 schema and security invariants on an empty disposable schem
           db.execute("UPDATE invitations SET status = 'ACCEPTED' WHERE society_id = ?", [
             a.society,
           ]),
-          dbError(3819),
+          dbError('ER_SIGNAL_EXCEPTION'),
         );
         await assert.rejects(
           db.execute('UPDATE invitations SET expires_at = created_at WHERE society_id = ?', [
             a.society,
           ]),
-          dbError(3819),
+          dbError('ER_SIGNAL_EXCEPTION'),
         );
       },
     );
@@ -487,7 +488,7 @@ void test('MySQL 8.4 schema and security invariants on an empty disposable schem
           db.execute("UPDATE registration_requests SET status = 'APPROVED' WHERE id = ?", [
             request,
           ]),
-          dbError(3819),
+          dbError('ER_SIGNAL_EXCEPTION'),
         );
         await assert.rejects(
           db.execute("UPDATE societies SET status = 'INVALID' WHERE id = ?", [a.society]),
@@ -529,6 +530,12 @@ void test('MySQL 8.4 schema and security invariants on an empty disposable schem
       'property management, CSV imports and tenant boundaries',
       async (propertySuite) => {
         await propertyIntegration(propertySuite, db);
+      },
+    );
+    await suite.test(
+      'resident invitations, registration approval and tenant identity',
+      async (resident) => {
+        await residentAccessIntegration(resident, db);
       },
     );
   } finally {

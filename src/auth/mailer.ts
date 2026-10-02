@@ -1,11 +1,12 @@
 import { createTransport } from 'nodemailer';
 import type { loadConfig } from './config.js';
+import type { ResidentMailer } from '../resident-access/accounts.js';
 export interface ResetMailer {
   send(email: string, link: string): Promise<void>;
 }
 export function smtpMailer(config: ReturnType<typeof loadConfig>): ResetMailer & {
   sendInvitation(email: string, link: string, societyName: string): Promise<void>;
-} {
+} & ResidentMailer {
   const transport = createTransport({
     host: config.SMTP_HOST,
     port: config.SMTP_PORT,
@@ -20,6 +21,47 @@ export function smtpMailer(config: ReturnType<typeof loadConfig>): ResetMailer &
     debug: false,
   });
   return {
+    async verification(email, link) {
+      await transport.sendMail({
+        from: config.SMTP_FROM,
+        to: email,
+        subject: 'Verify your SocietyEase email',
+        text:
+          'Verify your email within 30 minutes:\n\n' +
+          link +
+          '\n\nThis creates a login only. Society access requires committee approval.',
+        disableFileAccess: true,
+        disableUrlAccess: true,
+      });
+    },
+    async existingAccount(email, link) {
+      await transport.sendMail({
+        from: config.SMTP_FROM,
+        to: email,
+        subject: 'Your SocietyEase registration instructions',
+        text:
+          'Sign in with your existing account to request another society membership:\n\n' +
+          link +
+          '\n\nNo password or society access was changed.',
+        disableFileAccess: true,
+        disableUrlAccess: true,
+      });
+    },
+    async invitation(email, link, society) {
+      await transport.sendMail({
+        from: config.SMTP_FROM,
+        to: email,
+        subject: 'Your SocietyEase resident invitation',
+        text:
+          'The committee of ' +
+          society +
+          ' has verified your resident record and invited you. Open this single-use link within 72 hours:\n\n' +
+          link +
+          '\n\nExisting accounts must sign in with the invited email. New accounts can create a password. This invitation grants the Resident role only.',
+        disableFileAccess: true,
+        disableUrlAccess: true,
+      });
+    },
     async sendInvitation(email, link, societyName) {
       await transport.sendMail({
         from: config.SMTP_FROM,

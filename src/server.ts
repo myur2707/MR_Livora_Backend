@@ -15,6 +15,10 @@ import { createApp } from './http/app.js';
 import { OnboardingRepository } from './onboarding/repository.js';
 import { OnboardingService } from './onboarding/service.js';
 import { InvitationService } from './onboarding/invitations.js';
+import { ResidentAccounts } from './resident-access/accounts.js';
+import { ResidentIdentity } from './resident-access/identity.js';
+import { ResidentInvitations } from './resident-access/invitations.js';
+import { ResidentRequests } from './resident-access/requests.js';
 
 if (existsSync('.env')) loadEnvFile('.env');
 const log = (code: string, requestId: string): void => {
@@ -42,25 +46,37 @@ try {
   const property = new PropertyService(new PropertyAccess(database));
   const occupancy = new OccupancyService(property);
   const imports = new ImportService(property, occupancy);
+  const residentQueue = new ResetQueue((code, id) => log(code.replace('RESET_', 'RESIDENT_'), id));
+  const accounts = new ResidentAccounts(auth, config.APP_ORIGIN, mailer, residentQueue);
+  const residentIdentity = new ResidentIdentity(property);
+  const residentAccess = {
+    accounts,
+    invitations: new ResidentInvitations(residentIdentity, accounts),
+    requests: new ResidentRequests(residentIdentity, occupancy),
+  };
   const server = createApp(
     auth,
     log,
     proxy,
     { service, invitations },
     { service: property, occupancy, imports },
+    residentAccess,
   ).listen(config.PORT, config.HOST, () => console.info('SocietyEase API ready.'));
   server.requestTimeout = 30000;
   server.headersTimeout = 15000;
   const maintenance = setInterval(() => {
-    void Promise.all([repository.maintenance(Date.now()), imports.expire()]).catch(() =>
-      log('MAINTENANCE_FAILED', 'system'),
-    );
+    void Promise.all([
+      repository.maintenance(Date.now()),
+      imports.expire(),
+      accounts.expire(),
+      residentAccess.invitations.expire(),
+    ]).catch(() => log('MAINTENANCE_FAILED', 'system'));
   }, 60000);
   maintenance.unref();
   const shutdown = (): void => {
     clearInterval(maintenance);
     server.close(() => {
-      void Promise.all([queue.idle(), invitationQueue.idle()])
+      void Promise.all([queue.idle(), invitationQueue.idle(), residentQueue.idle()])
         .then(() => database.pool.end())
         .catch(() => log('SHUTDOWN_FAILED', 'system'));
     });
