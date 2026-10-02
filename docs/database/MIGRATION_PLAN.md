@@ -12,6 +12,8 @@
 
 The initial five migrations contain 27 domain tables plus `_schema_migrations`. Step 3 migration 006 adds five global identity/security tables and two audit triggers, and 007 adds automatic account credential revocation; see [auth schema](AUTH_SCHEMA.md) for dictionary, FKs and safe rollout. There are no drops, cascade deletes or automatic down commands. Migration SQL is committed, not generated at runtime.
 
+Step 4 migration 008 adds three initial-onboarding/invitation/safe-event tables and five lifecycle/immutability triggers. It does not alter existing tables or backfill existing societies. See [onboarding rollout and runtime grants](../security/SOCIETY_ONBOARDING.md). Apply pending additive migrations before restarting the API; the managed local runner performs this guarded upgrade on stop/start.
+
 ## Provisioning and privileges
 
 An administrator creates a fresh empty schema (do not reuse/overwrite a populated database):

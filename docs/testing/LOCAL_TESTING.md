@@ -1,6 +1,6 @@
 # Local manual testing on Windows
 
-The managed setup runs the implemented Steps 1–3 locally: the database, Angular shared components/PWA, cookie sessions, login/logout, password reset, roles and society switching. Platform/society dashboards are placeholders. Resident onboarding, billing, payments, notices and complaints have database tables but no business APIs or screens yet.
+The managed setup runs the implemented Steps 1–4 locally: the database, Angular shared components/PWA, cookie sessions, login/logout, password reset, roles and society switching. Step 4 adds limited platform metadata, initial society setup and committee verification. Ongoing resident management, billing, payments, notices and complaints remain later steps.
 
 ## Start, stop and restart
 
@@ -47,7 +47,9 @@ Open the ignored local file **.local-db/manual/TEST_ACCOUNTS.md** for the random
 
 All accounts are synthetic and share one randomly generated initial **local-only** password. Resetting a password changes only that account. The credentials file records initial passwords and is not automatically rewritten after resets.
 
-The fixture also creates building A / flat 101 with a person-only owner, a current person-only tenant and a historical tenant. Inspect these through a local database client using the migrator credentials in .env; no resident/flat UI exists yet. Runtime credentials intentionally cannot read business tables.
+The fixture also creates building A / flat 101 with a person-only owner, a current person-only tenant and a historical tenant. Inspect these through a local database client using the migrator credentials in .env; no resident/flat UI exists yet. Runtime credentials cannot read financial tables. Platform APIs never expose resident names or charge rates.
+
+For the new society wizard, follow [Step 4 manual testing](../../../MR_Livora_Frontend/docs/STEP_4_ONBOARDING.md). A stop/start applies additive migration 008 and its narrow local runtime grants without changing existing data/accounts.
 
 ## Manual checklist
 

@@ -31,6 +31,7 @@ export interface AuthIdentity {
   platformAdmin: boolean;
   memberships: Membership[];
   activeSociety: Membership | null;
+  setupSocieties?: { societyId: string; name: string; status: string }[];
 }
 export interface Session {
   hash: Buffer;

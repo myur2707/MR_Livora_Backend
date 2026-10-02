@@ -30,7 +30,11 @@ export class Security {
     }
     if (request.get('sec-fetch-site') === 'cross-site')
       throw new ApiError(403, 'ORIGIN_REJECTED', 'Request origin is not allowed.');
-    if (Object.keys(request.query).length > 0)
+    const paginated =
+      request.path === '/platform/societies' ||
+      /^\/(?:platform|onboarding)\/societies\/[1-9][0-9]*\/structure$/.test(request.path) ||
+      /^\/onboarding\/societies\/[1-9][0-9]*\/(?:residents|maintenance)$/.test(request.path);
+    if (Object.keys(request.query).length > 0 && !paginated)
       throw new ApiError(400, 'INVALID_REQUEST', 'Query parameters are not supported.');
     await this.auth.rate('api-ip', request.ip ?? 'unknown', 120, 60_000);
     next();

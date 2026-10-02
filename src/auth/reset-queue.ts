@@ -5,11 +5,11 @@ export class ResetQueue {
   private running = false;
   private readonly waiters: (() => void)[] = [];
   constructor(private readonly log: SafeLogger) {}
-  enqueue(job: () => Promise<void>, requestId: string): void {
+  enqueue(job: () => Promise<void>, requestId: string): boolean {
     // A bounded in-process queue keeps lookup/SMTP timing out of the public response.
     if (this.jobs.length >= 32) {
       this.log('RESET_QUEUE_FULL', requestId);
-      return;
+      return false;
     }
     this.jobs.push(async () => {
       try {
@@ -24,6 +24,7 @@ export class ResetQueue {
         void this.run();
       });
     }
+    return true;
   }
   private async run(): Promise<void> {
     while (this.jobs.length > 0) {

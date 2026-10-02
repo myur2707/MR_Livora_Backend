@@ -1,5 +1,6 @@
 import { createConnection } from 'mysql2/promise';
 import { assertTestTarget } from '../src/database/config.js';
+import { grantOnboardingRuntime } from '../src/database/onboarding-grants.js';
 
 export async function grantTestRuntime(): Promise<void> {
   assertTestTarget(process.env);
@@ -39,6 +40,7 @@ export async function grantTestRuntime(): Promise<void> {
         '%',
       ]);
     await db.query(`GRANT INSERT ON \`${schema}\`.auth_events TO ?@?`, [user, '%']);
+    await grantOnboardingRuntime(db, schema, user, '%');
   } finally {
     await db.end();
   }

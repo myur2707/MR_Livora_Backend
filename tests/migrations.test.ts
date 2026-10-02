@@ -10,11 +10,12 @@ const sql = 'CREATE TABLE example (id INT PRIMARY KEY) ENGINE=InnoDB;\n';
 
 void test('baseline contains ordered, additive, independently executable migrations', async () => {
   const migrations = await loadMigrations();
-  assert.equal(migrations.length, 7);
+  assert.equal(migrations.length, 8);
   assert.equal(migrations.slice(0, 5).flatMap((migration) => migration.statements).length, 44);
   assert.equal(migrations[5]?.statements.length, 7);
   assert.equal(migrations[6]?.statements.length, 1);
-  assert.equal(new Set(migrations.map((migration) => migration.checksum)).size, 7);
+  assert.equal(migrations[7]?.statements.length, 8);
+  assert.equal(new Set(migrations.map((migration) => migration.checksum)).size, 8);
 });
 
 void test('checksum is stable across Windows and Unix line endings', () => {

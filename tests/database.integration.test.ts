@@ -11,6 +11,7 @@ import { createFixture, insert } from './fixtures.js';
 import type { SqlValue } from './fixtures.js';
 import { assertTenantSchema, assertUtcTimestamps } from './schema-contract.js';
 import { authIntegration } from './auth.integration.js';
+import { onboardingIntegration } from './onboarding.integration.js';
 
 interface ValueRow extends RowDataPacket {
   value: string | number;
@@ -517,6 +518,12 @@ void test('MySQL 8.4 schema and security invariants on an empty disposable schem
     await suite.test('authentication and authorization HTTP security', async (authSuite) => {
       await authIntegration(authSuite, db);
     });
+    await suite.test(
+      'platform onboarding and committee verification security',
+      async (onboardingSuite) => {
+        await onboardingIntegration(onboardingSuite, db);
+      },
+    );
   } finally {
     await db.end();
   }

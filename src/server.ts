@@ -8,6 +8,9 @@ import { ResetQueue } from './auth/reset-queue.js';
 import { AuthService } from './auth/service.js';
 import { openRuntime } from './database/runtime.js';
 import { createApp } from './http/app.js';
+import { OnboardingRepository } from './onboarding/repository.js';
+import { OnboardingService } from './onboarding/service.js';
+import { InvitationService } from './onboarding/invitations.js';
 
 if (existsSync('.env')) loadEnvFile('.env');
 const log = (code: string, requestId: string): void => {
@@ -20,9 +23,22 @@ try {
   const database = await openRuntime(process.env);
   const repository = new AuthRepository(database);
   const queue = new ResetQueue(log);
-  const auth = await AuthService.create(repository, config.auth, smtpMailer(config), queue);
-  const server = createApp(auth, log, proxy).listen(config.PORT, config.HOST, () =>
-    console.info('SocietyEase API ready.'),
+  const mailer = smtpMailer(config);
+  const auth = await AuthService.create(repository, config.auth, mailer, queue);
+  const service = new OnboardingService(new OnboardingRepository(database));
+  const invitationQueue = new ResetQueue((code, id) =>
+    log(code.replace('RESET_', 'INVITATION_'), id),
+  );
+  const invitations = new InvitationService(
+    service,
+    config.APP_ORIGIN,
+    { send: (email, link, name) => mailer.sendInvitation(email, link, name) },
+    invitationQueue,
+  );
+  const server = createApp(auth, log, proxy, { service, invitations }).listen(
+    config.PORT,
+    config.HOST,
+    () => console.info('SocietyEase API ready.'),
   );
   server.requestTimeout = 30000;
   server.headersTimeout = 15000;
@@ -33,8 +49,7 @@ try {
   const shutdown = (): void => {
     clearInterval(maintenance);
     server.close(() => {
-      void queue
-        .idle()
+      void Promise.all([queue.idle(), invitationQueue.idle()])
         .then(() => database.pool.end())
         .catch(() => log('SHUTDOWN_FAILED', 'system'));
     });

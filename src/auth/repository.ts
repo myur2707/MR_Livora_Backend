@@ -5,6 +5,7 @@ import type { AuthIdentity, Membership, Session, RequestAudit } from './types.js
 
 export interface UserRow extends RowDataPacket {
   id: string;
+  person_id: string;
   email_normalized: string;
   password_hash: string | null;
   status: string;
@@ -29,7 +30,7 @@ export class AuthRepository {
   async user(email: string): Promise<UserRow | undefined> {
     return (
       await this.database.rows<UserRow>(
-        'SELECT id, email_normalized, password_hash, status FROM users WHERE email_normalized = ?',
+        'SELECT id, person_id, email_normalized, password_hash, status FROM users WHERE email_normalized = ?',
         [email],
       )
     )[0];
@@ -82,7 +83,7 @@ export class AuthRepository {
   async identity(session: Session): Promise<AuthIdentity | null> {
     if (!session.userId) return null;
     const users = await this.database.rows<UserRow>(
-      "SELECT id, email_normalized, password_hash, status FROM users WHERE id = ? AND status = 'ACTIVE'",
+      "SELECT id, person_id, email_normalized, password_hash, status FROM users WHERE id = ? AND status = 'ACTIVE'",
       [session.userId],
     );
     const user = users[0];
@@ -92,12 +93,33 @@ export class AuthRepository {
       "SELECT user_id FROM platform_user_roles WHERE user_id = ? AND role_code = 'PLATFORM_ADMIN'",
       [user.id],
     );
+    const setupRows = await this.database.rows<RowDataPacket>(
+      `SELECT DISTINCT s.id,s.name,s.status FROM societies s
+       JOIN society_onboarding o ON o.society_id=s.id
+       JOIN society_memberships m ON m.society_id=s.id AND m.user_id=? AND m.status='ACTIVE' AND m.joined_at<=UTC_TIMESTAMP(6) AND m.ended_at IS NULL
+       JOIN society_persons sp ON sp.society_id=s.id AND sp.person_id=? AND sp.archived_at IS NULL
+       JOIN membership_roles mr ON mr.society_id=s.id AND mr.membership_id=m.id
+       JOIN roles r ON r.society_id=s.id AND r.id=mr.role_id AND r.code='COMMITTEE_ADMIN' AND r.archived_at IS NULL
+       JOIN role_permissions rp ON rp.society_id=s.id AND rp.role_id=r.id
+       JOIN permissions p ON p.id=rp.permission_id AND p.code='society.members.manage'
+       WHERE s.archived_at IS NULL AND s.status IN ('SETUP_IN_PROGRESS','PENDING_VERIFICATION')`,
+      [user.id, user.person_id],
+    );
+    const setupSocieties = setupRows.map((row) => {
+      const societyId: unknown = row['id'];
+      const name: unknown = row['name'];
+      const status: unknown = row['status'];
+      if (typeof societyId !== 'string' || typeof name !== 'string' || typeof status !== 'string')
+        throw new Error('Invalid setup metadata.');
+      return { societyId, name, status };
+    });
     return {
       userId: user.id,
       email: user.email_normalized,
       platformAdmin: platform.length > 0,
       memberships,
       activeSociety: memberships.find((m) => m.societyId === session.societyId) ?? null,
+      setupSocieties,
     };
   }
   async memberships(userId: string): Promise<Membership[]> {

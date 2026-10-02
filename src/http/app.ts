@@ -4,6 +4,9 @@ import type { AuthService } from '../auth/service.js';
 import { ApiError, errorHandler } from './errors.js';
 import type { SafeLogger } from './errors.js';
 import { Security } from './security.js';
+import { onboardingRouter } from '../onboarding/router.js';
+import type { OnboardingService } from '../onboarding/service.js';
+import type { InvitationService } from '../onboarding/invitations.js';
 
 const email = z
   .string()
@@ -29,7 +32,12 @@ function parse<T>(schema: z.ZodType<T>, input: unknown): T {
     throw new ApiError(400, 'INVALID_REQUEST', 'Check the request fields and try again.');
   return result.data;
 }
-export function createApp(auth: AuthService, log: SafeLogger, trustedProxy?: string) {
+export function createApp(
+  auth: AuthService,
+  log: SafeLogger,
+  trustedProxy?: string,
+  onboarding?: { service: OnboardingService; invitations: InvitationService },
+) {
   const app = express();
   const security = new Security(auth);
   app.disable('x-powered-by');
@@ -136,6 +144,8 @@ export function createApp(auth: AuthService, log: SafeLogger, trustedProxy?: str
     (request, response) => response.json(security.identity(request).activeSociety),
   );
   app.use('/api/v1', router);
+  if (onboarding)
+    app.use('/api/v1', onboardingRouter(security, onboarding.service, onboarding.invitations));
   app.use(() => {
     throw new ApiError(404, 'NOT_FOUND', 'Resource not found.');
   });

@@ -224,7 +224,14 @@ if (!(Get-OwnedProcess 'backend')) {
     $previous['NODE_EXTRA_CA_CERTS'] = $env:NODE_EXTRA_CA_CERTS
     $env:NODE_EXTRA_CA_CERTS = $cert
     $server = Join-Path $backend 'dist\server.js'
-    try { Start-LocalProcess 'backend' $node @((Quote $server)) $backend $server }
+    try {
+        Push-Location $backend
+        try {
+            & $node 'dist/database/local-upgrade.js'
+            if ($LASTEXITCODE -ne 0) { throw 'Additive local upgrade failed. Existing data was retained.' }
+        } finally { Pop-Location }
+        Start-LocalProcess 'backend' $node @((Quote $server)) $backend $server
+    }
     finally { foreach ($name in $previous.Keys) { [Environment]::SetEnvironmentVariable($name, $previous[$name], 'Process') } }
 }
 Wait-Port 'backend' 3000

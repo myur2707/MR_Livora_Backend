@@ -64,3 +64,5 @@ Societies: DRAFT → SETUP_IN_PROGRESS → PENDING_VERIFICATION → ACTIVE; SUSP
 All instants are UTC `DATETIME(6)`; session time zone must be `+00:00`. Do not append `Z` to an unconverted local time. API serialization will use ISO-8601 UTC; Angular will display the society's validated IANA timezone. Occupancy/charge/billing/payment `DATE` columns represent local calendar dates, so do not timezone-shift them. Date ranges are inclusive; a next occupancy interval starts on the following date if intervals must not overlap.
 
 No cascade deletes. Archive resident profiles, buildings/flats, roles/charges and societies; suspend/deactivate accounts and memberships. See [migration policy](MIGRATION_PLAN.md) for financial retention and privacy decisions.
+
+Step 4 adds initial committee onboarding without changing the baseline. See [additive onboarding schema](ONBOARDING_SCHEMA.md) and [API, privacy and verification gates](../security/SOCIETY_ONBOARDING.md).

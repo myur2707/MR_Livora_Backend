@@ -2,7 +2,7 @@
 
 These rules travel with this independent repository. Follow the engineering/security baseline in `docs/ENGINEERING_STANDARDS.md`; it mirrors the workspace rules.
 
-- Steps 1 and 3 contain database architecture/tooling and authentication/authorization. Preserve applied migrations and auth boundaries; do not add business APIs until requested.
+- Steps 1, 3 and 4 contain database architecture, authentication and initial society onboarding. Preserve applied migrations, auth/tenant boundaries and immutable verification. Follow docs/security/SOCIETY_ONBOARDING.md. Ongoing resident and financial APIs require a later explicitly requested step.
 - Runtime target: Node 24 LTS; MySQL 8.4 LTS, InnoDB, utf8mb4, enforced checks and UTC sessions. Use mysql2 parameterized raw SQL, no ORM.
 - Run `npm run check` and, with an isolated empty MySQL schema, `npm run test:db`. Never point integration tests at shared/production data. `npm run test:db` requires a schema name prefixed `livora_test_` and refuses a nonempty schema.
 - Migrations are ordered, checksum-verified, additive SQL with explicit statement boundaries. Never edit an applied migration. Partial DDL failure requires operator inspection; do not automatically retry or delete data.
