@@ -241,6 +241,11 @@ export class OnboardingRepository {
       );
       return {
         statuses: counts.map((row) => ({ status: row['status'], total: Number(row['total']) })),
+        totalSocieties: counts.reduce((sum, row) => sum + Number(row.total), 0),
+        pendingVerification: Number(
+          counts.find((row) => row.status === 'PENDING_VERIFICATION')?.total ?? 0,
+        ),
+        updatedAt: new Date(this.clock()).toISOString(),
       };
     });
   }

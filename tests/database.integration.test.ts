@@ -4,6 +4,7 @@ import { billingIntegration } from './billing.integration.js';
 import { paymentsIntegration } from './payments.integration.js';
 import { residentPortalIntegration } from './resident-portal.integration.js';
 import { communityIntegration } from './community.integration.js';
+import { reportsIntegration } from './reports.integration.js';
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
@@ -562,6 +563,10 @@ void test('MySQL 8.4 schema and security invariants on an empty disposable schem
     );
     await suite.test('community publishing, complaint workflow and privacy', async (community) =>
       communityIntegration(community, db),
+    );
+    await suite.test(
+      'dashboard/report totals, time zones, exports and tenant boundaries',
+      async (reports) => reportsIntegration(reports, db),
     );
   } finally {
     await db.end();

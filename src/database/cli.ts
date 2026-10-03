@@ -5,17 +5,23 @@ import { loadMigrations, pendingMigrations } from './migrations.js';
 import { migrate, openDatabase, readHistory } from './runner.js';
 import { provisionBillingPermissions } from './billing-grants.js';
 import { provisionCommunityPermissions } from './community-grants.js';
+import { provisionReportPermissions } from './report-permissions.js';
 
 async function main(): Promise<void> {
   if (existsSync('.env')) loadEnvFile('.env');
   const command = process.argv[2];
   if (
-    !['validate', 'status', 'migrate', 'billing-permissions', 'community-permissions'].includes(
-      command ?? '',
-    )
+    ![
+      'validate',
+      'status',
+      'migrate',
+      'billing-permissions',
+      'community-permissions',
+      'report-permissions',
+    ].includes(command ?? '')
   ) {
     throw new MigrationError(
-      'Usage: database/cli.ts validate|status|migrate|billing-permissions|community-permissions',
+      'Usage: database/cli.ts validate|status|migrate|billing-permissions|community-permissions|report-permissions',
     );
   }
   const migrations = await loadMigrations();
@@ -25,11 +31,14 @@ async function main(): Promise<void> {
   }
   const db = await openDatabase();
   try {
-    if (command === 'billing-permissions' || command === 'community-permissions') {
+    if (
+      ['billing-permissions', 'community-permissions', 'report-permissions'].includes(command ?? '')
+    ) {
       if (pendingMigrations(migrations, await readHistory(db)).length)
         throw new MigrationError('Apply all migrations before provisioning permissions.');
       if (command === 'billing-permissions') await provisionBillingPermissions(db);
-      else await provisionCommunityPermissions(db);
+      else if (command === 'community-permissions') await provisionCommunityPermissions(db);
+      else await provisionReportPermissions(db);
       console.info('Additive permissions provisioned; existing unrelated restrictions retained.');
     } else if (command === 'status') {
       const history = await readHistory(db);

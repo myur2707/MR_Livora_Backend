@@ -13,3 +13,5 @@ These rules travel with this independent repository. Follow the engineering/secu
 - Keep DB credentials separate from the application; use TLS for remote databases. Keep DECIMAL and BIGINT values as strings at JavaScript boundaries.
 - Run and report formatter, lint, typecheck, tests, build, migrations and git-diff review. Do only the requested roadmap step.
 - Step 9 resident projections follow docs/resident/STEP_9_RESIDENT_PORTAL.md and docs/security/RESIDENT_PORTAL.md: current occupancy and period-start bill eligibility, own-payer receipts, own complaints, live verified person links and no platform bypass. Preserve this approved privacy policy and existing migrations.
+
+- Step 11 follows docs/reports/STEP_11_REPORTS.md and docs/security/REPORTS.md: current-balance/event-date semantics, exact totals, role-scoped reports and bounded formula-safe audited exports.

@@ -62,6 +62,7 @@ void test('production configuration rejects insecure origins and placeholder sec
 void test('role ceilings prevent financial privileges for residents, members and platform roles', () => {
   assert.deepEqual(roleCapabilities.RESIDENT, ['society.dashboard.read']);
   assert.deepEqual(roleCapabilities.COMMITTEE_MEMBER, [
+    'society.dashboard.manage',
     'society.dashboard.read',
     'society.notices.manage',
     'society.complaints.manage',

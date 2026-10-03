@@ -80,3 +80,5 @@ Authentication and management use thin Express handlers, services and parameteri
 Step 8: [payment policies/API/rollout](docs/billing/STEP_8_PAYMENTS.md), [additive payment schema 013](docs/database/PAYMENT_SCHEMA.md), [security](docs/security/PAYMENTS.md) and [verification](docs/testing/STEP_8_VERIFICATION.md). Stop/start the owned local stack after checks to safely upgrade without resetting existing accounts.
 
 The [Step 7 and Step 8 checklist verification](docs/testing/STEP_7_8_MANUAL_VERIFICATION.md) records billing/payment checks, regression fixes and the remaining physical print/reconciliation checks.
+
+Step 11: [dashboard/report API, date and CSV policies](docs/reports/STEP_11_REPORTS.md), [threat model](docs/security/REPORTS.md) and [verification](docs/testing/STEP_11_VERIFICATION.md). No new schema migration; provision additive report permissions after Step 10.

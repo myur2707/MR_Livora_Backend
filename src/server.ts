@@ -26,6 +26,7 @@ import { ResidentAccess } from './resident-portal/access.js';
 import { residentPortalModule } from './resident-portal/router.js';
 import { CommunityAccess } from './community/access.js';
 import { communityModule } from './community/router.js';
+import { reportsModule } from './reports/router.js';
 
 if (existsSync('.env')) loadEnvFile('.env');
 const log = (code: string, requestId: string): void => {
@@ -72,6 +73,7 @@ try {
     paymentModule(new BillingAccess(database)),
     residentPortalModule(new ResidentAccess(database)),
     communityModule(new CommunityAccess(database)),
+    reportsModule(new CommunityAccess(database)),
   ).listen(config.PORT, config.HOST, () => console.info('SocietyEase API ready.'));
   server.requestTimeout = 30000;
   server.headersTimeout = 15000;

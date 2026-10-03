@@ -204,7 +204,12 @@ export async function onboardingIntegration(suite: TestContext, db: Connection):
         assert.deepEqual(legacy['events'], []);
         const dashboard = await platform.request('/platform/dashboard');
         assert.equal(dashboard.status, 200);
-        assert.deepEqual(Object.keys(dashboard.data), ['statuses']);
+        assert.deepEqual(Object.keys(dashboard.data), [
+          'statuses',
+          'totalSocieties',
+          'pendingVerification',
+          'updatedAt',
+        ]);
       },
     );
     await suite.test(

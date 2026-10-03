@@ -6,6 +6,7 @@ import { sqlTime } from '../auth/repository.js';
 import { minor, money } from './money.js';
 import { collectorSource } from './people.js';
 import type { ListQuery } from './contracts.js';
+import { collectionLedger } from './ledger.js';
 const projection = `p.id,p.flat_id AS flatId,p.payer_person_id AS payerPersonId,p.method,p.payment_date AS paymentDate,p.amount,p.reference,p.notes,p.created_at AS recordedAt,
  cm.user_id AS collectedByUserId,rm.user_id AS recordedByUserId,r.receipt_number AS receiptNumber,r.issued_at AS issuedAt,
  COALESCE(d.society_name,s.name) AS societyName,COALESCE(d.currency,'INR') AS currency,
@@ -222,11 +223,7 @@ export class PaymentQueries {
     return this.access.database.transaction(async (db) => {
       const scope = await this.access.tenant(db, session),
         filter = filters(query);
-      const shared = `p.id AS paymentId,p.flat_id AS flatId,cm.user_id AS collectedByUserId,r.receipt_number AS receiptNumber`;
-      const joins = ` JOIN payments p ON p.society_id=x.society_id AND p.id=x.payment_id LEFT JOIN society_memberships cm ON cm.society_id=p.society_id AND cm.id=p.collected_by_membership_id LEFT JOIN receipts r ON r.society_id=p.society_id AND r.payment_id=p.id`;
-      const ledger = `SELECT p.id,'COLLECTION' AS kind,p.payment_date AS eventDate,p.method,p.reference,p.amount,${shared} FROM payments p LEFT JOIN society_memberships cm ON cm.society_id=p.society_id AND cm.id=p.collected_by_membership_id LEFT JOIN receipts r ON r.society_id=p.society_id AND r.payment_id=p.id WHERE p.society_id=?
-        UNION ALL SELECT x.id,'REFUND',x.refund_date,x.method,x.reference,-x.amount,${shared} FROM payment_refunds x ${joins} WHERE x.society_id=?
-        UNION ALL SELECT x.id,'REVERSAL',COALESCE(d.operation_date,DATE(x.created_at)),p.method,p.reference,-p.amount,${shared} FROM payment_reversals x ${joins} LEFT JOIN payment_reversal_details d ON d.society_id=x.society_id AND d.reversal_id=x.id WHERE x.society_id=?`;
+      const ledger = collectionLedger;
       const sql = 'SELECT * FROM (' + ledger + ') ledger' + filter.where,
         values = [scope.societyId, scope.societyId, scope.societyId, ...filter.values];
       const summary = await rows<RowDataPacket>(

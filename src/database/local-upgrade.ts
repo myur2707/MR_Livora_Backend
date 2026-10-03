@@ -12,6 +12,7 @@ import { grantOnboardingRuntime } from './onboarding-grants.js';
 import { grantBillingRuntime, provisionBillingPermissions } from './billing-grants.js';
 import { grantResidentPortalRuntime } from './resident-portal-grants.js';
 import { grantCommunityRuntime, provisionCommunityPermissions } from './community-grants.js';
+import { provisionReportPermissions } from './report-permissions.js';
 async function upgrade(): Promise<void> {
   const dataRoot = resolve('.local-db/manual');
   const settings = z
@@ -52,6 +53,7 @@ async function upgrade(): Promise<void> {
       );
       await provisionBillingPermissions(db);
       await provisionCommunityPermissions(db);
+      await provisionReportPermissions(db);
     } finally {
       await db.end();
     }

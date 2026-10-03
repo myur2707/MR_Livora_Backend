@@ -13,6 +13,7 @@ import { billingRouter, type BillingModule } from '../billing/router.js';
 import { paymentRouter, type PaymentModule } from '../payments/router.js';
 import { residentPortalRouter, type ResidentPortalModule } from '../resident-portal/router.js';
 import { communityRouter, type CommunityModule } from '../community/router.js';
+import { reportsRouter, type ReportsModule } from '../reports/router.js';
 
 const email = z
   .string()
@@ -49,6 +50,7 @@ export function createApp(
   payments?: PaymentModule,
   residentPortal?: ResidentPortalModule,
   community?: CommunityModule,
+  reports?: ReportsModule,
 ) {
   const app = express();
   const security = new Security(auth);
@@ -166,6 +168,7 @@ export function createApp(
   if (residentPortal)
     app.use('/api/v1/society/resident', residentPortalRouter(security, residentPortal));
   if (community) app.use('/api/v1/society/community', communityRouter(security, community));
+  if (reports) app.use('/api/v1', reportsRouter(security, reports));
   if (payments) app.use('/api/v1', paymentRouter(security, payments));
   if (billing) app.use('/api/v1', billingRouter(security, billing));
   if (property) app.use('/api/v1', propertyRouter(security, property));
