@@ -65,33 +65,63 @@ export const reportQuery = pageQuery
 export type ReportQuery = z.infer<typeof reportQuery>;
 export const financialReport = (kind: ReportKind) =>
   !['residents', 'flat-occupancy'].includes(kind);
+interface FilterPolicy {
+  sorts: readonly ReportQuery['sort'][];
+  statuses: readonly ReportQuery['status'][];
+  fields: readonly (keyof ReportQuery)[];
+}
+const billPolicy: FilterPolicy = {
+  sorts: ['id', 'date', 'amount', 'outstanding'],
+  statuses: [
+    'ALL',
+    'DRAFT',
+    'ISSUED',
+    'OUTSTANDING',
+    'SETTLED',
+    'OVERDUE',
+    'UNPAID',
+    'PARTIALLY_PAID',
+  ],
+  fields: ['buildingId', 'flatId', 'periodId'],
+};
+const eventPolicy: FilterPolicy = {
+  sorts: ['id', 'date', 'amount'],
+  statuses: ['ALL'],
+  fields: ['buildingId', 'flatId', 'collectorUserId', 'method'],
+};
+const filterPolicies: Record<ReportKind, FilterPolicy> = {
+  billing: billPolicy,
+  outstanding: billPolicy,
+  collection: eventPolicy,
+  'cash-collection': eventPolicy,
+  payments: {
+    ...eventPolicy,
+    statuses: ['ALL', 'RECORDED', 'PARTIALLY_REFUNDED', 'REFUNDED', 'REVERSED'],
+  },
+  residents: { sorts: ['id', 'date', 'name'], statuses: ['ALL', 'ACTIVE', 'ARCHIVED'], fields: [] },
+  'flat-occupancy': {
+    sorts: ['id', 'date', 'name'],
+    statuses: ['ALL', 'CURRENT', 'ENDED', 'FUTURE', 'ARCHIVED'],
+    fields: ['buildingId', 'flatId', 'occupancyType'],
+  },
+};
+const scopedFilters = [
+  'buildingId',
+  'flatId',
+  'periodId',
+  'collectorUserId',
+  'method',
+  'occupancyType',
+] as const;
 export function validateFilters(kind: ReportKind, query: ReportQuery): void {
-  const billing = kind === 'billing' || kind === 'outstanding',
-    people = kind === 'residents',
-    occupancy = kind === 'flat-occupancy',
-    events = kind === 'collection' || kind === 'cash-collection';
-  const sorts = billing
-    ? ['id', 'date', 'amount', 'outstanding']
-    : people || occupancy
-      ? ['id', 'date', 'name']
-      : ['id', 'date', 'amount'];
-  const statuses = billing
-    ? ['ALL', 'DRAFT', 'ISSUED', 'OUTSTANDING', 'SETTLED', 'OVERDUE', 'UNPAID', 'PARTIALLY_PAID']
-    : people
-      ? ['ALL', 'ACTIVE', 'ARCHIVED']
-      : occupancy
-        ? ['ALL', 'CURRENT', 'ENDED', 'FUTURE', 'ARCHIVED']
-        : events
-          ? ['ALL']
-          : ['ALL', 'RECORDED', 'PARTIALLY_REFUNDED', 'REFUNDED', 'REVERSED'];
+  const policy = filterPolicies[kind];
+  const unsupported = scopedFilters.some(
+    (field) => query[field] !== undefined && !policy.fields.includes(field),
+  );
   if (
-    !sorts.includes(query.sort) ||
-    !statuses.includes(query.status) ||
-    (query.periodId && !billing) ||
-    (query.method && (billing || people || occupancy)) ||
-    (query.collectorUserId && (billing || people || occupancy)) ||
-    (query.occupancyType && !occupancy) ||
-    (people && (query.buildingId || query.flatId)) ||
+    !policy.sorts.includes(query.sort) ||
+    !policy.statuses.includes(query.status) ||
+    unsupported ||
     (kind === 'cash-collection' && query.method && query.method !== 'CASH')
   )
     throw new ApiError(400, 'INVALID_REQUEST', 'These filters are not supported by this report.');

@@ -52,12 +52,19 @@ export class AuthService {
   }
   async rate(scope: string, key: string, limit: number, windowMs: number): Promise<void> {
     const window = Math.floor(this.clock() / windowMs);
+    const expiresAt = (window + 1) * windowMs;
     const allowed = await this.repository.rate(
       keyedHash(this.config.secret, scope + ':' + window + ':' + key),
-      (window + 1) * windowMs,
+      expiresAt,
       limit,
     );
-    if (!allowed) throw new ApiError(429, 'RATE_LIMITED', 'Too many requests. Try again later.');
+    if (!allowed)
+      throw new ApiError(
+        429,
+        'RATE_LIMITED',
+        'Too many requests. Try again later.',
+        Math.max(1, Math.ceil((expiresAt - this.clock()) / 1000)),
+      );
   }
   async readSession(token: string): Promise<Session | null> {
     return this.repository.session(tokenHash(token), this.clock(), this.config.idleMs);

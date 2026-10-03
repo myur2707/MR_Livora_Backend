@@ -5,6 +5,24 @@ import type { AuthIdentity, Permission, Session } from '../auth/types.js';
 import { equalToken } from '../auth/crypto.js';
 import { ApiError } from './errors.js';
 
+const queryPaths = [
+  /^\/society\/(?:buildings|flats|persons|imports)$/,
+  /^\/society\/(?:flats\/[1-9][0-9]*\/occupancies|imports\/[1-9][0-9]*\/rows)$/,
+  /^\/society\/reports\/(?:outstanding|collection|cash-collection|payments|residents|flat-occupancy|billing)(?:\/export)?$/,
+  /^\/society\/community\/(?:notices|complaints|complaints\/assignees|complaints\/[1-9][0-9]*\/history)$/,
+  /^\/society\/resident\/complaints\/[1-9][0-9]*\/history$/,
+  /^\/society\/resident\/(?:flats|bills|payments|receipts|notices|complaints)$/,
+  /^\/society\/billing\/payments(?:\/(?:report|collectors|payers|report-collectors))?$/,
+  /^\/society\/billing\/(?:charge-types|configurations|periods|buildings|flats|bills|outstanding)$/,
+  /^\/(?:platform|onboarding)\/societies\/[1-9][0-9]*\/structure$/,
+  /^\/onboarding\/societies\/[1-9][0-9]*\/(?:residents|maintenance)$/,
+];
+const queryRoutes = [
+  '/resident-access/requests',
+  '/society/resident-invitations',
+  '/society/registration-requests',
+  '/platform/societies',
+];
 interface Context {
   token: string;
   session: Session;
@@ -28,40 +46,17 @@ export class Security {
       response.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
       if (!request.secure) throw new ApiError(400, 'HTTPS_REQUIRED', 'HTTPS is required.');
     }
-    if (request.get('sec-fetch-site') === 'cross-site')
+    const origin = request.get('origin');
+    if (
+      (origin !== undefined && origin !== this.auth.config.origin) ||
+      request.get('sec-fetch-site') === 'cross-site'
+    )
       throw new ApiError(403, 'ORIGIN_REJECTED', 'Request origin is not allowed.');
-    const propertyList =
-      /^\/society\/(?:buildings|flats|persons|imports)$/.test(request.path) ||
-      /^\/society\/(?:flats\/[1-9][0-9]*\/occupancies|imports\/[1-9][0-9]*\/rows)$/.test(
-        request.path,
-      );
-    const paginated =
-      propertyList ||
-      /^\/society\/reports\/(?:outstanding|collection|cash-collection|payments|residents|flat-occupancy|billing)(?:\/export)?$/.test(
-        request.path,
-      ) ||
-      /^\/society\/community\/(?:notices|complaints|complaints\/assignees|complaints\/[1-9][0-9]*\/history)$/.test(
-        request.path,
-      ) ||
-      /^\/society\/resident\/complaints\/[1-9][0-9]*\/history$/.test(request.path) ||
-      /^\/society\/resident\/(?:flats|bills|payments|receipts|notices|complaints)$/.test(
-        request.path,
-      ) ||
-      /^\/society\/billing\/payments(?:\/(?:report|collectors|payers|report-collectors))?$/.test(
-        request.path,
-      ) ||
-      /^\/society\/billing\/(?:charge-types|configurations|periods|buildings|flats|bills|outstanding)$/.test(
-        request.path,
-      ) ||
-      [
-        '/resident-access/requests',
-        '/society/resident-invitations',
-        '/society/registration-requests',
-      ].includes(request.path) ||
-      request.path === '/platform/societies' ||
-      /^\/(?:platform|onboarding)\/societies\/[1-9][0-9]*\/structure$/.test(request.path) ||
-      /^\/onboarding\/societies\/[1-9][0-9]*\/(?:residents|maintenance)$/.test(request.path);
-    if (Object.keys(request.query).length > 0 && !paginated)
+    if (
+      Object.keys(request.query).length > 0 &&
+      !queryRoutes.includes(request.path) &&
+      !queryPaths.some((pattern) => pattern.test(request.path))
+    )
       throw new ApiError(400, 'INVALID_REQUEST', 'Query parameters are not supported.');
     await this.auth.rate('api-ip', request.ip ?? 'unknown', 120, 60_000);
     next();

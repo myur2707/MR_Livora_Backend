@@ -12,7 +12,7 @@ export type SocietyStatus = (typeof statuses)[number];
 export const identifier = z
   .string()
   .regex(/^[1-9][0-9]{0,19}$/)
-  .refine((v) => BigInt(v) <= 18446744073709551615n);
+  .pipe(z.string().refine((v) => BigInt(v) <= 18446744073709551615n));
 const text = (max: number) =>
   z
     .string()

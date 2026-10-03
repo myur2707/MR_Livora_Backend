@@ -1,5 +1,7 @@
 # Step 10 verification
 
+Follow-up: [real browser/API manual checklist verification](STEP_10_11_MANUAL_VERIFICATION.md) on 4 October 2026 covers every requested Step 10 and Step 11 checklist item.
+
 Verified 3 October 2026 with pinned Node 24, MySQL 8.4 and Angular 22. No dependency upgrade or external integration was added.
 
 | Check                                        | Result                                                                                                 |

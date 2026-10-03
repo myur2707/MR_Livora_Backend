@@ -19,7 +19,7 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "check-format": "prettier --check .",
-    "test": "tsx --test tests/migrations.test.ts tests/auth.unit.test.ts tests/onboarding.unit.test.ts tests/property.unit.test.ts tests/resident-access.unit.test.ts tests/billing.unit.test.ts tests/payments.unit.test.ts tests/resident-portal.unit.test.ts tests/community.unit.test.ts tests/reports.unit.test.ts",
+    "test": "tsx --test tests/migrations.test.ts tests/auth.unit.test.ts tests/http.unit.test.ts tests/onboarding.unit.test.ts tests/property.unit.test.ts tests/resident-access.unit.test.ts tests/billing.unit.test.ts tests/payments.unit.test.ts tests/resident-portal.unit.test.ts tests/community.unit.test.ts tests/reports.unit.test.ts",
     "db:billing-permissions": "tsx src/database/cli.ts billing-permissions",
     "db:community-permissions": "tsx src/database/cli.ts community-permissions",
     "db:report-permissions": "tsx src/database/cli.ts report-permissions",

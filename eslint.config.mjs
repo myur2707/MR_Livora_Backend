@@ -20,4 +20,5 @@ export default tseslint.config(
       '@typescript-eslint/no-floating-promises': 'error',
     },
   },
+  { files: ['src/**/*.ts'], rules: { complexity: ['error', 30] } },
 );

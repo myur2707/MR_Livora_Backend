@@ -725,6 +725,22 @@ export async function billingIntegration(suite: TestContext, db: Connection): Pr
       },
     );
     await suite.test(
+      'financial searches treat SQL syntax and wildcards as literal text',
+      async () => {
+        for (const value of ["' OR 1=1 --", "'; SELECT password_hash FROM users; --", '%_']) {
+          const result = await committee.request(
+            '/society/billing/bills?q=' + encodeURIComponent(value),
+          );
+          assert.equal(result.status, 200);
+          assert.equal(result.data['total'], 0);
+          assert.deepEqual(result.data['items'], []);
+        }
+        const after = await committee.request('/society/billing/bills?q=B-001');
+        assert.equal(after.status, 200);
+        assert.equal(after.data['total'], 1);
+      },
+    );
+    await suite.test(
       'reversed payments restore outstanding and permission revocation defeats retained preview sessions',
       async () => {
         const before = await module.queries.detail(adminSession, String(a.bill));

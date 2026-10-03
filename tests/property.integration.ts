@@ -1,3 +1,4 @@
+import { parseCsv } from '../src/property/imports/parser.js';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import type { TestContext } from 'node:test';
@@ -135,6 +136,86 @@ export async function propertyIntegration(suite: TestContext, db: Connection): P
         204,
       );
     await suite.test(
+      'CSV lookups are reused only within validation and confirmation sees new data',
+      async () => {
+        await database.connection(async (connection) => {
+          const scope = {
+            societyId: String(a.society),
+            userId: String(admin.user),
+            membershipId: String(a.membership),
+            timezone: 'Asia/Kolkata',
+            today: '2026-10-04',
+          };
+          const csv = flatHeader + 'A,Block A,CACHE-TEST,1.00\n'.repeat(3);
+          const [before] = await connection.query<RowDataPacket[]>(
+            "SHOW SESSION STATUS LIKE 'Com_stmt_execute'",
+          );
+          const result = await imports.validator.validate(
+            connection,
+            scope,
+            'FLATS',
+            parseCsv('FLATS', csv),
+          );
+          const [after] = await connection.query<RowDataPacket[]>(
+            "SHOW SESSION STATUS LIKE 'Com_stmt_execute'",
+          );
+          assert.equal(Number(after[0]?.['Value']) - Number(before[0]?.['Value']), 2);
+          assert.ok(
+            result.every((row) => row.errors.some((error) => error.code === 'DUPLICATE_ROW')),
+          );
+          assert.ok(
+            result.every((row) => !row.errors.some((error) => error.code === 'DUPLICATE_FLAT')),
+          );
+          await db.execute('INSERT INTO flats(society_id,building_id,flat_number) VALUES(?,?,?)', [
+            a.society,
+            a.building,
+            'CACHE-TEST',
+          ]);
+          const fresh = await imports.validator.validate(
+            connection,
+            scope,
+            'FLATS',
+            parseCsv('FLATS', flatHeader + 'A,Block A,CACHE-TEST,1.00\n'),
+          );
+          assert.ok(fresh[0]?.errors.some((error) => error.code === 'DUPLICATE_FLAT'));
+        });
+      },
+    );
+    await suite.test(
+      'CSV occupancy groups preserve inclusive dates, error rows and distinct occupancy types',
+      async () => {
+        await database.connection(async (connection) => {
+          const scope = {
+            societyId: String(a.society),
+            userId: String(admin.user),
+            membershipId: String(a.membership),
+            timezone: 'Asia/Kolkata',
+            today: '2026-10-04',
+          };
+          const csv =
+            residentHeader +
+            [
+              'CACHE_RES,Distinct Person,,,A,101,TENANT,2026-01-01,2026-01-10',
+              'CACHE_RES,Distinct Person,,,a,101,TENANT,2026-01-10,2026-01-20',
+              'CACHE_RES,Distinct Person,,,A,101,OWNER,2026-01-01,2026-01-10',
+              'CACHE_RES,Distinct Person,,,A,101,TENANT,2026-01-11,2026-01-12',
+            ].join('\n');
+          const result = await imports.validator.validate(
+            connection,
+            scope,
+            'RESIDENTS',
+            parseCsv('RESIDENTS', csv),
+          );
+          assert.equal(result.length, 4);
+          assert.deepEqual(
+            result.map((row) => row.errors.map((error) => error.code)),
+            [[], ['OCCUPANCY_OVERLAP'], [], []],
+          );
+          assert.ok(result.every((row) => row.targets.personId === null));
+        });
+      },
+    );
+    await suite.test(
       'tenant authorization, scope, strict pagination, CSRF and mass assignment',
       async () => {
         for (const cl of [ordinary, root])
@@ -174,6 +255,45 @@ export async function propertyIntegration(suite: TestContext, db: Connection): P
           403,
         );
         assert.equal((await get('flats?pageSize=1'))['pageSize'], 1);
+      },
+    );
+    await suite.test(
+      'SQL injection searches remain literal and protected identity/audit fields are rejected',
+      async () => {
+        const probes = ["' OR 1=1 --", "'; SELECT password_hash FROM users; --", '%_\\'];
+        for (const value of probes) {
+          const response = await client.request('/society/flats?q=' + encodeURIComponent(value));
+          assert.equal(response.status, 200);
+          assert.equal(response.data['total'], 0);
+          assert.deepEqual(response.data['items'], []);
+        }
+        assert.equal(
+          (
+            await client.request(
+              '/society/flats?sort=' + encodeURIComponent('flat_number; SELECT 1'),
+            )
+          ).status,
+          400,
+        );
+        for (const field of [
+          'role',
+          'society_id',
+          'actor_user_id',
+          'recorded_by_user_id',
+          'safe_metadata',
+        ]) {
+          const response = await client.request('/society/buildings', {
+            code: 'PROTECTED',
+            name: 'Protected probe',
+            [field]: String(foreign.user),
+          });
+          assert.equal(response.status, 400);
+        }
+        const [created] = await db.execute<RowDataPacket[]>(
+          'SELECT id FROM buildings WHERE society_id=? AND code=?',
+          [a.society, 'PROTECTED'],
+        );
+        assert.deepEqual(created, []);
       },
     );
     await suite.test(

@@ -207,6 +207,31 @@ export async function communityIntegration(suite: TestContext, db: Connection): 
       },
     );
     await suite.test(
+      'notice search parameterizes SQL syntax and rejects assignment of protected fields',
+      async () => {
+        const result = await committee.request(
+          '/society/community/notices?search=' + encodeURIComponent("' OR 1=1 --"),
+        );
+        assert.equal(result.status, 200);
+        assert.equal(result.data['total'], 0);
+        assert.deepEqual(result.data['items'], []);
+        for (const field of [
+          'society_id',
+          'role',
+          'actor_user_id',
+          'created_by_membership_id',
+          'safe_metadata',
+        ]) {
+          const result = await committee.request('/society/community/notices', {
+            title: 'Protected probe',
+            body: 'Synthetic text',
+            [field]: '999999',
+          });
+          assert.equal(result.status, 400);
+        }
+      },
+    );
+    await suite.test(
       'resident creates categorized private complaint with initial history',
       async () => {
         const submitted = await member.request('/society/resident/complaints', {

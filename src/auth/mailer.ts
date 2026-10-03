@@ -25,7 +25,7 @@ export function smtpMailer(config: ReturnType<typeof loadConfig>): ResetMailer &
       await transport.sendMail({
         from: config.SMTP_FROM,
         to: email,
-        subject: 'Verify your SocietyEase email',
+        subject: 'Verify your MR Livora email',
         text:
           'Verify your email within 30 minutes:\n\n' +
           link +
@@ -38,7 +38,7 @@ export function smtpMailer(config: ReturnType<typeof loadConfig>): ResetMailer &
       await transport.sendMail({
         from: config.SMTP_FROM,
         to: email,
-        subject: 'Your SocietyEase registration instructions',
+        subject: 'Your MR Livora registration instructions',
         text:
           'Sign in with your existing account to request another society membership:\n\n' +
           link +
@@ -51,7 +51,7 @@ export function smtpMailer(config: ReturnType<typeof loadConfig>): ResetMailer &
       await transport.sendMail({
         from: config.SMTP_FROM,
         to: email,
-        subject: 'Your SocietyEase resident invitation',
+        subject: 'Your MR Livora resident invitation',
         text:
           'The committee of ' +
           society +
@@ -66,7 +66,7 @@ export function smtpMailer(config: ReturnType<typeof loadConfig>): ResetMailer &
       await transport.sendMail({
         from: config.SMTP_FROM,
         to: email,
-        subject: 'Your SocietyEase committee invitation',
+        subject: 'Your MR Livora committee invitation',
         text:
           'You are invited to help set up ' +
           societyName +
@@ -81,7 +81,7 @@ export function smtpMailer(config: ReturnType<typeof loadConfig>): ResetMailer &
       await transport.sendMail({
         from: config.SMTP_FROM,
         to: email,
-        subject: 'Reset your SocietyEase password',
+        subject: 'Reset your MR Livora password',
         text:
           'Use this single-use link within 30 minutes to reset your password:\n\n' +
           link +

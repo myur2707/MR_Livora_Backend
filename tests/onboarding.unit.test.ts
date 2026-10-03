@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { ResetQueue } from '../src/auth/reset-queue.js';
 import { assertTransition, assertComplete } from '../src/onboarding/policy.js';
+import { ApiError } from '../src/http/errors.js';
 import {
+  identifier,
   parse,
   buildingSchema,
   residentSchema,
@@ -10,6 +12,30 @@ import {
   createSocietySchema,
   pageSchema,
 } from '../src/onboarding/contracts.js';
+void test('identifiers reject malformed values before integer conversion and retain unsigned limits', () => {
+  for (const value of [
+    '1 OR 1=1',
+    '1; SELECT password_hash FROM users',
+    'text',
+    '1.5',
+    '1e2',
+    '-1',
+    '0',
+    '01',
+    '',
+    '18446744073709551616',
+    '9'.repeat(10000),
+    1,
+    null,
+  ]) {
+    assert.equal(identifier.safeParse(value).success, false);
+    assert.throws(
+      () => parse(identifier, value),
+      (error: unknown) => error instanceof ApiError && error.status === 400,
+    );
+  }
+  for (const value of ['1', '18446744073709551615']) assert.equal(identifier.parse(value), value);
+});
 void test('society lifecycle rejects jumps, terminal revival and repeated transitions', () => {
   for (const [from, to] of [
     ['DRAFT', 'ACTIVE'],

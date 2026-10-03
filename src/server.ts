@@ -74,7 +74,7 @@ try {
     residentPortalModule(new ResidentAccess(database)),
     communityModule(new CommunityAccess(database)),
     reportsModule(new CommunityAccess(database)),
-  ).listen(config.PORT, config.HOST, () => console.info('SocietyEase API ready.'));
+  ).listen(config.PORT, config.HOST, () => console.info('MR Livora API ready.'));
   server.requestTimeout = 30000;
   server.headersTimeout = 15000;
   const maintenance = setInterval(() => {

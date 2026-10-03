@@ -43,7 +43,7 @@ export class ImportService {
     readonly property: PropertyService,
     readonly occupancy: OccupancyService,
   ) {
-    this.validator = new ImportValidator(property, occupancy);
+    this.validator = new ImportValidator(occupancy);
   }
   private expired(batch: BatchRow): boolean {
     return new Date(utcTimestamp(batch.expires_at) ?? '').getTime() <= this.property.access.clock();
@@ -413,8 +413,9 @@ export class ImportService {
             (typeof error === 'object' &&
               error !== null &&
               'code' in error &&
+              typeof error.code === 'string' &&
               ['ER_DUP_ENTRY', 'ER_SIGNAL_EXCEPTION', 'ER_NO_REFERENCED_ROW_2'].includes(
-                String(error.code),
+                error.code,
               ))
           )
             throw new ApiError(

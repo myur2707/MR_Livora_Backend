@@ -1,4 +1,4 @@
-# MR Livora / SocietyEase engineering rules
+# MR Livora engineering rules
 
 Implement only the step the user requests and stop after checks. The roadmap is reference material, not permission to execute later steps. Read project-local AGENTS.md before changes.
 

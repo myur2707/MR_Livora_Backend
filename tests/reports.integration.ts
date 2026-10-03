@@ -340,6 +340,28 @@ export async function reportsIntegration(suite: TestContext, db: Connection): Pr
       },
     );
     await suite.test(
+      'every report treats SQL injection search text literally and rejects injected identifiers',
+      async () => {
+        for (const kind of reportKinds) {
+          const result = await committee.request(
+            base + '/' + kind + '?q=' + encodeURIComponent("' OR 1=1 --"),
+          );
+          assert.equal(result.status, 200, kind);
+          assert.equal(result.data['total'], 0, kind);
+          assert.deepEqual(result.data['items'], [], kind);
+        }
+        for (const query of [
+          'sort=' + encodeURIComponent('id; SELECT password_hash FROM users'),
+          'direction=' + encodeURIComponent('DESC; SELECT 1'),
+          'buildingId=' + encodeURIComponent('1 OR 1=1'),
+          'role=PLATFORM_ADMIN',
+          'actor_user_id=' + platform.user,
+        ])
+          assert.equal((await committee.request(base + '/billing?' + query)).status, 400, query);
+        assert.equal((await committee.request(base + '/billing')).data['total'], 2);
+      },
+    );
+    await suite.test(
       'date filters use event dates and society-local creation boundaries',
       async () => {
         const day = await committee.request(base + '/collection?from=2026-10-03&to=2026-10-03');

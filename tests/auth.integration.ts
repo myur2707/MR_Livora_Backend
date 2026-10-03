@@ -107,6 +107,35 @@ export async function authIntegration(suite: TestContext, db: Connection): Promi
   const fresh = (): AuthClient => new AuthClient(base, config.origin);
   try {
     await suite.test(
+      'read requests reject unexpected origins and rate limits report their actual window',
+      async () => {
+        assert.equal(
+          (
+            await client.request('/auth/csrf', undefined, {
+              Origin: 'http://other.example',
+              'Sec-Fetch-Site': 'same-site',
+            })
+          ).status,
+          403,
+        );
+        const noOrigin = await fetch(base + '/api/v1/auth/csrf');
+        assert.equal(noOrigin.status, 200);
+        assert.equal(noOrigin.headers.get('Access-Control-Allow-Origin'), null);
+        assert.equal((await client.request('/auth/csrf?role=PLATFORM_ADMIN')).status, 400);
+        const saved = now;
+        now = Math.floor(now / 60000) * 60000 + 59000;
+        await auth.rate('step12-window', 'synthetic-actor', 1, 60000);
+        await assert.rejects(
+          auth.rate('step12-window', 'synthetic-actor', 1, 60000),
+          (error: unknown) =>
+            error instanceof ApiError && error.status === 429 && error.retryAfterSeconds === 1,
+        );
+        now += 1000;
+        await auth.rate('step12-window', 'synthetic-actor', 1, 60000);
+        now = saved;
+      },
+    );
+    await suite.test(
       'runtime account cannot perform DDL, grant roles, rewrite money, delete bills or modify audits',
       async () => {
         for (const sql of [
@@ -593,6 +622,7 @@ export async function authIntegration(suite: TestContext, db: Connection): Promi
     await suite.test(
       'production cookies are Secure/__Host; API responses never expose traces, SQL or tokens',
       async () => {
+        tickWindow();
         const prod = await AuthService.create(
           repository,
           {
@@ -605,7 +635,9 @@ export async function authIntegration(suite: TestContext, db: Connection): Promi
           queue,
           () => now,
         );
-        const secureServer = createApp(prod, log, '127.0.0.1').listen(0, '127.0.0.1');
+        const secureServer = createApp(prod, log, '127.0.0.1')
+          .set('env', 'production')
+          .listen(0, '127.0.0.1');
         await once(secureServer, 'listening');
         const secureAddress = secureServer.address();
         assert.ok(secureAddress && typeof secureAddress !== 'string');
@@ -624,6 +656,28 @@ export async function authIntegration(suite: TestContext, db: Connection): Promi
             assert.ok(response.headers.get('set-cookie')?.includes(flag));
           assert.equal(response.headers.get('set-cookie')?.includes('Domain='), false);
           assert.equal(response.headers.get('cache-control'), 'no-store');
+          const forwarded = { 'X-Forwarded-Proto': 'https' };
+          assert.equal(
+            (
+              await browser.request(
+                '/auth/login',
+                { email: 'platform@example.invalid', password },
+                forwarded,
+              )
+            ).status,
+            200,
+          );
+          const identity = repository.identity.bind(repository);
+          repository.identity = () =>
+            Promise.reject(new Error('SELECT private password_hash STACK C:\\private'));
+          try {
+            const failed = await browser.request('/auth/session', undefined, forwarded);
+            assert.equal(failed.status, 500);
+            assert.equal(failed.headers.get('cache-control'), 'no-store');
+            assert.equal(/SELECT|password_hash|STACK|private|stack|trace/.test(failed.raw), false);
+          } finally {
+            repository.identity = identity;
+          }
         } finally {
           await new Promise<void>((resolve, reject) =>
             secureServer.close((error) => (error ? reject(error) : resolve())),

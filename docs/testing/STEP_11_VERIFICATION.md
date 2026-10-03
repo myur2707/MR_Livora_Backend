@@ -1,5 +1,7 @@
 # Step 11 verification — 2026-10-03
 
+Follow-up: [real browser/API manual checklist verification](STEP_10_11_MANUAL_VERIFICATION.md) on 4 October 2026 covers every requested checklist item and records a report accessibility fix.
+
 Step 10 was completed and checked separately before Step 11. Step 10 passed 217 regular tests and both GitHub quality workflows. Step 11 preserves its migration/workflows and all earlier resident/billing/payment privacy boundaries.
 
 ## Executed checks

@@ -88,7 +88,7 @@ The managed frontend serves a production build. Restart the setup after code cha
 
 ## Current manual verification
 
-The [Step 2/3 checklist report](STEP_2_3_MANUAL_VERIFICATION.md) records **115 passing automated tests**, real browser/API and local TLS SMTP reset checks, an actual Chrome PWA installation/standalone launch, the table keyboard/mobile fix, and the remaining deployed-HTTPS cookie check. The installed app uses an isolated Chrome profile; the ignored frontend `.local-tools/Open-SocietyEase-PWA.ps1` reopens it while services are running. Initial manual-account passwords were preserved.
+The [Step 2/3 checklist report](STEP_2_3_MANUAL_VERIFICATION.md) records **115 passing automated tests**, real browser/API and local TLS SMTP reset checks, an actual Chrome PWA installation/standalone launch, the table keyboard/mobile fix, and the remaining deployed-HTTPS cookie check. The installed app uses an isolated Chrome profile; the ignored frontend `.local-tools/Open-MR Livora-PWA.ps1` reopens it while services are running. Initial manual-account passwords were preserved.
 
 ## Initial local setup verification on 2026-10-02
 
