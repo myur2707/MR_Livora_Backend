@@ -30,6 +30,10 @@ export async function residentPortalIntegration(suite: TestContext, db: Connecti
   );
   const a = await createFixture(db, 'PORTAL_A', user, person, 'RESIDENT');
   const b = await createFixture(db, 'PORTAL_B', user, person, 'COMMITTEE_MEMBER');
+  await db.execute("UPDATE society_memberships SET joined_at='2026-09-01' WHERE id IN (?,?)", [
+    a.membership,
+    b.membership,
+  ]);
   const strangerPerson = await insert(db, 'INSERT INTO persons() VALUES()');
   const stranger = await insert(
     db,
@@ -128,7 +132,7 @@ export async function residentPortalIntegration(suite: TestContext, db: Connecti
   );
   const published = await insert(
     db,
-    "INSERT INTO notices(society_id,title,body,status,published_at,created_by_membership_id) VALUES(?,'Published notice','Plain notice text','PUBLISHED',UTC_TIMESTAMP(6),?)",
+    "INSERT INTO notices(society_id,title,body,status,published_at,created_by_membership_id) VALUES(?,'Published notice','Plain notice text','PUBLISHED','2026-10-02',?)",
     [a.society, a.membership],
   );
   const hiddenNotice = await insert(
@@ -149,7 +153,7 @@ export async function residentPortalIntegration(suite: TestContext, db: Connecti
   await grantTestRuntime();
   const database = await openRuntime(process.env);
   let elapsed = 0;
-  const clock = () => Date.now() + elapsed;
+  const clock = () => Date.parse('2026-10-03T06:30:00Z') + elapsed;
   const queue = new ResetQueue(() => undefined);
   const auth = await AuthService.create(
     new AuthRepository(database),
