@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { identifier, parse } from '../onboarding/contracts.js';
+import { categories } from '../community/policy.js';
 export { identifier, parse };
 export const pageQuery = z.strictObject({
   page: z.coerce.number().int().min(1).max(10000).default(1),
@@ -17,6 +18,7 @@ const text = (max: number, multiline = false) =>
     .max(max)
     .refine((v) => !/\p{Cc}/u.test(multiline ? v.replace(/[\n\r\t]/g, '') : v));
 export const complaintInput = z.strictObject({
+  category: z.enum(categories).default('OTHER'),
   flatId: identifier,
   title: text(200),
   description: text(4000, true),

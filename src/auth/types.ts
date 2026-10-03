@@ -14,11 +14,17 @@ export const permissions = [
   'society.finance.discount',
   'society.finance.reverse',
   'society.members.manage',
+  'society.notices.manage',
+  'society.complaints.manage',
 ] as const;
 export type Permission = (typeof permissions)[number];
 export const roleCapabilities: Record<TenantRole, readonly Permission[]> = {
   COMMITTEE_ADMIN: permissions,
-  COMMITTEE_MEMBER: ['society.dashboard.read'],
+  COMMITTEE_MEMBER: [
+    'society.dashboard.read',
+    'society.notices.manage',
+    'society.complaints.manage',
+  ],
   ACCOUNTANT: [
     'society.dashboard.read',
     'society.finance.read',

@@ -1,5 +1,7 @@
 # MR_Livora_Backend
 
+Step 10 adds [committee notices and complaint workflows](docs/community/STEP_10_COMMUNITY.md), with [executed verification results](docs/testing/STEP_10_VERIFICATION.md). Apply additive migration 014 and provision explicit community permissions/runtime grants; the managed local runner handles this safely.
+
 Smart Community Management — Connect. Manage. Live Better.
 
 Step 9 adds the [resident portal API and approved privacy policy](docs/resident/STEP_9_RESIDENT_PORTAL.md), [threat model](docs/security/RESIDENT_PORTAL.md), [verification](docs/testing/STEP_9_VERIFICATION.md) and [real-stack manual checklist results](docs/testing/STEP_9_MANUAL_VERIFICATION.md). No migration is added; the guarded local stop/start runner rebuilds both apps and updates narrow runtime grants while preserving existing accounts and records.

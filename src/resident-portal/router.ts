@@ -97,5 +97,14 @@ export function residentPortalRouter(security: Security, module: ResidentPortalM
     );
     s.status(201).json(result);
   });
+  router.get('/complaints/:id/history', async (r, s) =>
+    s.json(
+      await module.community.history(
+        security.context(r).session,
+        parse(identifier, r.params['id']),
+        parse(pageQuery, r.query),
+      ),
+    ),
+  );
   return router;
 }

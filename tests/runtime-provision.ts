@@ -5,6 +5,7 @@ import { grantOnboardingRuntime } from '../src/database/onboarding-grants.js';
 import { grantResidentAccessRuntime } from '../src/database/resident-access-grants.js';
 import { grantBillingRuntime } from '../src/database/billing-grants.js';
 import { grantResidentPortalRuntime } from '../src/database/resident-portal-grants.js';
+import { grantCommunityRuntime } from '../src/database/community-grants.js';
 
 export async function grantTestRuntime(): Promise<void> {
   assertTestTarget(process.env);
@@ -49,6 +50,7 @@ export async function grantTestRuntime(): Promise<void> {
     await grantResidentAccessRuntime(db, schema, user, '%');
     await grantBillingRuntime(db, schema, user, '%');
     await grantResidentPortalRuntime(db, schema, user, '%');
+    await grantCommunityRuntime(db, schema, user, '%');
   } finally {
     await db.end();
   }

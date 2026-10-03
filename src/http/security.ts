@@ -37,6 +37,10 @@ export class Security {
       );
     const paginated =
       propertyList ||
+      /^\/society\/community\/(?:notices|complaints|complaints\/assignees|complaints\/[1-9][0-9]*\/history)$/.test(
+        request.path,
+      ) ||
+      /^\/society\/resident\/complaints\/[1-9][0-9]*\/history$/.test(request.path) ||
       /^\/society\/resident\/(?:flats|bills|payments|receipts|notices|complaints)$/.test(
         request.path,
       ) ||

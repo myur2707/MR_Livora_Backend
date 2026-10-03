@@ -6,11 +6,23 @@ import type { ResidentAccess } from './access.js';
 import { type ResidentScope } from './access.js';
 import { page } from './repository.js';
 import type { ComplaintInput, PageQuery } from './contracts.js';
-const noticeFields = 'id,title,body,published_at AS publishedAt';
+import {
+  complaintStatus,
+  complaintCategory,
+  complaintTables,
+  history,
+  noticeAuthor,
+} from '../community/repository.js';
+const noticeFields = 'n.id,n.title,n.body,n.published_at AS publishedAt,' + noticeAuthor;
 const complaintFields =
-  'c.id,c.flat_id AS flatId,c.title,c.description,c.status,c.created_at AS createdAt,c.resolved_at AS resolvedAt,f.flat_number AS flatNumber,building.code AS buildingCode';
+  'c.id,c.flat_id AS flatId,c.title,c.description,' +
+  complaintStatus +
+  ' AS status,' +
+  complaintCategory +
+  ' AS category,c.created_at AS createdAt,COALESCE(w.resolved_at,c.resolved_at) AS resolvedAt,f.flat_number AS flatNumber,building.code AS buildingCode';
 const complaints =
-  ' FROM complaints c JOIN flats f ON f.society_id=c.society_id AND f.id=c.flat_id JOIN buildings building ON building.society_id=f.society_id AND building.id=f.building_id WHERE c.society_id=? AND c.submitted_by_membership_id=? AND c.archived_at IS NULL';
+  complaintTables +
+  ' WHERE c.society_id=? AND c.submitted_by_membership_id=? AND c.archived_at IS NULL';
 function complaintView(row: RowDataPacket) {
   return {
     ...row,
@@ -21,12 +33,11 @@ function complaintView(row: RowDataPacket) {
 export class ResidentCommunity {
   constructor(readonly access: ResidentAccess) {}
   async feed(db: PoolConnection, scope: ResidentScope, query: PageQuery) {
-    // Step 9 reads published society-wide notices only. Targeted publishing/committee
-    // workflows belong to Step 10 and must introduce their own reviewed audience model.
+    // Publications are society-wide; drafts, future publications and archives stay private.
     const result = await page<RowDataPacket>(
       db,
       'SELECT ' + noticeFields,
-      " FROM notices WHERE society_id=? AND status='PUBLISHED' AND published_at<=?",
+      " FROM notices n WHERE n.society_id=? AND n.status='PUBLISHED' AND n.published_at<=?",
       [scope.societyId, sqlTime(this.access.clock())],
       query,
     );
@@ -47,7 +58,7 @@ export class ResidentCommunity {
         db,
         'SELECT ' +
           noticeFields +
-          " FROM notices WHERE society_id=? AND id=? AND status='PUBLISHED' AND published_at<=?",
+          " FROM notices n WHERE n.society_id=? AND n.id=? AND n.status='PUBLISHED' AND n.published_at<=?",
         [scope.societyId, id, sqlTime(this.access.clock())],
       );
       if (!found[0]) throw notFound();
@@ -95,8 +106,33 @@ export class ResidentCommunity {
           sqlTime(this.access.clock()),
         ],
       );
+      const now = sqlTime(this.access.clock());
+      await db.execute(
+        "INSERT INTO complaint_workflows(society_id,complaint_id,category,status,updated_at) VALUES(?,?,?,'NEW',?)",
+        [scope.societyId, id, input.category, now],
+      );
+      await db.execute(
+        "INSERT INTO complaint_status_history(society_id,complaint_id,to_status,actor_membership_id,note,revision,created_at) VALUES(?,?,'NEW',?,'Complaint submitted',1,?)",
+        [scope.societyId, id, scope.membershipId, now],
+      );
       await this.access.audit(db, scope, 'complaint.submitted', 'complaint', id, audit);
       return { id };
+    });
+  }
+  async history(session: Session, id: string, query: PageQuery) {
+    return this.access.database.transaction(async (db) => {
+      const scope = await this.access.tenant(db, session);
+      if (
+        !(
+          await rows(db, 'SELECT c.id' + complaints + ' AND c.id=?', [
+            scope.societyId,
+            scope.membershipId,
+            id,
+          ])
+        )[0]
+      )
+        throw notFound();
+      return history(db, scope.societyId, id, query.page, query.pageSize);
     });
   }
 }

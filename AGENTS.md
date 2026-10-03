@@ -1,5 +1,7 @@
 # Backend rules
 
+- Step 10 notice/complaint rules are documented in docs/community/STEP_10_COMMUNITY.md. Use complaint_workflows as authoritative with the shared legacy projection; preserve history, revision checks and submitter privacy.
+
 These rules travel with this independent repository. Follow the engineering/security baseline in `docs/ENGINEERING_STANDARDS.md`; it mirrors the workspace rules.
 
 - Steps 1, 3–6 contain database architecture, authentication, initial society onboarding, property/resident management and verified resident access. Preserve applied migrations, auth/tenant boundaries and immutable verification. Follow docs/security/SOCIETY_ONBOARDING.md, docs/security/PROPERTY_MANAGEMENT.md and docs/security/RESIDENT_ACCESS.md. Step 7 adds maintenance configuration and bill generation; follow docs/billing/STEP_7_BILLING.md and docs/security/BILLING.md. Step 8 adds payment recording, allocation, immutable receipts and append-only returns/corrections; follow docs/billing/STEP_8_PAYMENTS.md, docs/database/PAYMENT_SCHEMA.md and docs/security/PAYMENTS.md.

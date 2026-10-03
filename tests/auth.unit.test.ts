@@ -61,7 +61,15 @@ void test('production configuration rejects insecure origins and placeholder sec
 });
 void test('role ceilings prevent financial privileges for residents, members and platform roles', () => {
   assert.deepEqual(roleCapabilities.RESIDENT, ['society.dashboard.read']);
-  assert.deepEqual(roleCapabilities.COMMITTEE_MEMBER, ['society.dashboard.read']);
+  assert.deepEqual(roleCapabilities.COMMITTEE_MEMBER, [
+    'society.dashboard.read',
+    'society.notices.manage',
+    'society.complaints.manage',
+  ]);
+  for (const role of ['RESIDENT', 'COMMITTEE_MEMBER'] as const)
+    assert.ok(
+      roleCapabilities[role].every((permission) => !permission.startsWith('society.finance.')),
+    );
   assert.ok(roleCapabilities.ACCOUNTANT.includes('society.finance.record'));
   assert.ok(roleCapabilities.COMMITTEE_ADMIN.includes('society.members.manage'));
   assert.equal('PLATFORM_ADMIN' in roleCapabilities, false);
