@@ -2,7 +2,7 @@
 
 Smart Community Management — Connect. Manage. Live Better.
 
-Step 9 adds the [resident portal API and approved privacy policy](docs/resident/STEP_9_RESIDENT_PORTAL.md), [threat model](docs/security/RESIDENT_PORTAL.md) and [verification](docs/testing/STEP_9_VERIFICATION.md). No migration is added; the guarded local stop/start runner rebuilds both apps and updates narrow runtime grants while preserving existing accounts and records.
+Step 9 adds the [resident portal API and approved privacy policy](docs/resident/STEP_9_RESIDENT_PORTAL.md), [threat model](docs/security/RESIDENT_PORTAL.md), [verification](docs/testing/STEP_9_VERIFICATION.md) and [real-stack manual checklist results](docs/testing/STEP_9_MANUAL_VERIFICATION.md). No migration is added; the guarded local stop/start runner rebuilds both apps and updates narrow runtime grants while preserving existing accounts and records.
 
 Steps 1, 3–9 implement the shared-schema database, safe migrations, authentication/authorization, society onboarding, property/resident management, verified resident access, maintenance configuration/billing, payment recording and the resident portal. `../MR_Livora_Frontend` is the separate Angular PWA repository. Follow [AGENTS.md](AGENTS.md) before further work.
 
