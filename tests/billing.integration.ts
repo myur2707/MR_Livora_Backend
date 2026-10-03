@@ -15,6 +15,7 @@ import { ResetQueue } from '../src/auth/reset-queue.js';
 import { AuthClient } from './auth-client.js';
 import { createApp } from '../src/http/app.js';
 import { BillingAccess } from '../src/billing/access.js';
+import { minor } from '../src/billing/money.js';
 import { billingModule } from '../src/billing/router.js';
 import { BillingGeneration, BillWriter } from '../src/billing/generation.js';
 import { parse, periodInput, typeInput } from '../src/billing/contracts.js';
@@ -241,6 +242,17 @@ export async function billingIntegration(suite: TestContext, db: Connection): Pr
           [a.society],
         );
         typeId = String(types[0]?.id);
+        for (const rate of ['-1.00', '1.001', 'NaN'])
+          assert.equal(
+            (
+              await committee.request('/society/billing/configurations', {
+                ...base,
+                chargeTypeId: typeId,
+                rate,
+              })
+            ).status,
+            400,
+          );
         await module.configuration.addConfiguration(
           adminSession,
           {
@@ -305,6 +317,15 @@ export async function billingIntegration(suite: TestContext, db: Connection): Pr
             .find((f) => f.flatId === vacant)
             ?.exclusions.some((e) => e.includes('Vacant')),
         );
+        const singleVacant = await module.generation.preview(adminSession, {
+          periodId,
+          flatIds: [vacant],
+          discounts: [],
+        });
+        assert.deepEqual(
+          singleVacant.flats[0],
+          preview.flats.find((f) => f.flatId === vacant),
+        );
       },
     );
     await suite.test(
@@ -343,6 +364,10 @@ export async function billingIntegration(suite: TestContext, db: Connection): Pr
           { status: 409 },
         );
         const detail = await module.queries.detail(adminSession, issued);
+        assert.equal(
+          detail.items.reduce((sum, item) => sum + minor(String(item['amount'])), 0n),
+          30063n,
+        );
         assert.equal(detail.gross, '300.63');
         assert.equal(detail.net, '200.43');
         assert.equal(detail.outstanding, '200.43');
@@ -456,6 +481,34 @@ export async function billingIntegration(suite: TestContext, db: Connection): Pr
           discounts: [],
         });
         assert.equal(preview.flats.find((f) => f.flatId === vacant)?.status, 'NO_CHARGES');
+        const excluded = await module.generation.preview(adminSession, {
+          periodId: next.id,
+          flatIds: [vacant],
+          discounts: [],
+        });
+        assert.deepEqual(
+          excluded.flats[0],
+          preview.flats.find((f) => f.flatId === vacant),
+        );
+        await assert.rejects(
+          module.generation.generate(
+            adminSession,
+            {
+              periodId: next.id,
+              flatIds: [vacant],
+              discounts: [],
+              previewHash: excluded.previewHash,
+              idempotencyKey: randomUUID(),
+            },
+            audit,
+          ),
+          { code: 'NO_NEW_BILLS' },
+        );
+        const [excludedBills] = await db.execute<RowDataPacket[]>(
+          'SELECT id FROM bills WHERE society_id=? AND billing_period_id=? AND flat_id=?',
+          [a.society, next.id, vacant],
+        );
+        assert.equal(excludedBills.length, 0);
         assert.equal(preview.flats.find((f) => f.flatId === flat)?.previousOutstanding, '200.43');
         const future = await module.configuration.addPeriod(
           adminSession,
@@ -505,11 +558,16 @@ export async function billingIntegration(suite: TestContext, db: Connection): Pr
         );
         const input = { periodId: first.id, flatIds: [flat], discounts: [] };
         const preview = await module.generation.preview(adminSession, input);
-        await module.generation.generate(
+        assert.equal(preview.net, '12.34');
+        const generated = await module.generation.generate(
           adminSession,
           { ...input, previewHash: preview.previewHash, idempotencyKey: 'one-time-event-12345' },
           audit,
         );
+        const eventBill = await module.queries.detail(adminSession, generated.billIds[0] ?? '');
+        assert.equal(eventBill.net, '12.34');
+        assert.equal(eventBill.items.length, 1);
+        assert.equal(eventBill.items[0]?.['amount'], '12.34');
         await module.configuration.addConfiguration(
           adminSession,
           { ...base, chargeTypeId: charge.id, rate: '99.00' },
@@ -591,6 +649,53 @@ export async function billingIntegration(suite: TestContext, db: Connection): Pr
       'lists paginate and issued details, flat references and configuration stay tenant scoped',
       async () => {
         assert.equal((await foreign.request('/society/billing/bills/' + issued)).status, 404);
+        assert.equal(
+          (
+            await foreign.request('/society/billing/generate', {
+              periodId,
+              flatIds: [flat],
+              discounts: [],
+              previewHash: 'a'.repeat(64),
+              idempotencyKey: randomUUID(),
+            })
+          ).status,
+          404,
+        );
+        const filtered = await committee.request(
+          '/society/billing/bills?periodId=' +
+            periodId +
+            '&buildingId=' +
+            a.building +
+            '&status=OUTSTANDING',
+        );
+        assert.equal(filtered.status, 200);
+        assert.equal(filtered.data['total'], 2);
+        assert.ok(Array.isArray(filtered.data['items']));
+        assert.ok(
+          filtered.data['items'].every(
+            (row: unknown) =>
+              typeof row === 'object' &&
+              row !== null &&
+              'periodId' in row &&
+              row.periodId === periodId &&
+              'buildingCode' in row &&
+              row.buildingCode === 'A' &&
+              'status' in row &&
+              row.status === 'ISSUED',
+          ),
+        );
+        const foreignBuilding = await committee.request(
+          '/society/billing/bills?buildingId=' + b.building,
+        );
+        assert.equal(foreignBuilding.status, 200);
+        assert.equal(foreignBuilding.data['total'], 0);
+        const settled = await committee.request('/society/billing/bills?status=SETTLED');
+        assert.equal(settled.status, 200);
+        assert.equal(settled.data['total'], 1);
+        assert.ok(Array.isArray(settled.data['items']));
+        const settledBill: unknown = settled.data['items'][0];
+        assert.ok(typeof settledBill === 'object' && settledBill !== null && 'id' in settledBill);
+        assert.equal(settledBill.id, String(a.bill));
         assert.equal(
           (
             await foreign.request('/society/billing/preview', {

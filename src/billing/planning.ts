@@ -20,7 +20,7 @@ interface Flat extends RowDataPacket {
   buildingCode: string;
   flatNumber: string;
   area: string | null;
-  occupied: number;
+  occupied: number | string;
   existingBillId: string | null;
 }
 interface Configuration extends RowDataPacket {
@@ -34,7 +34,7 @@ interface Configuration extends RowDataPacket {
   rate: string;
   effectiveUntil: string | null;
   eligibility: string;
-  enabled: number;
+  enabled: number | string;
 }
 export interface BillLine {
   configurationId: string;
@@ -178,10 +178,10 @@ export class BillingPlanner {
     const items: BillLine[] = [];
     for (const config of selected.values()) {
       let excluded = '';
-      if (!config.enabled) excluded = 'Disabled rule';
+      if (Number(config.enabled) === 0) excluded = 'Disabled rule';
       else if (config.effectiveUntil && config.effectiveUntil < period.startsOn)
         excluded = 'Expired rule';
-      else if (config.eligibility === 'OCCUPIED_ONLY' && !flat.occupied)
+      else if (config.eligibility === 'OCCUPIED_ONLY' && Number(flat.occupied) === 0)
         excluded = 'Vacant at period start';
       else if (used.some((u) => u.flat_id === flat.id && u.charge_type_id === config.chargeTypeId))
         excluded = 'One-time charge already billed';

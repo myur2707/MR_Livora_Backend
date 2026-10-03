@@ -59,7 +59,7 @@ export class BillingQueries {
           issuedAt: utcTimestamp(row['issuedAt']),
           ...balance(row, scope.today),
         })),
-        total: summary[0]?.total ?? 0,
+        total: Number(summary[0]?.total ?? 0),
         page: query.page,
         pageSize: query.pageSize,
         summary: {

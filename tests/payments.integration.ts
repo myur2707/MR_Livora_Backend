@@ -250,6 +250,9 @@ export async function paymentsIntegration(suite: TestContext, db: Connection): P
         assert.equal(receipt.data['status'], 'RECORDED');
         assert.equal(receipt.data['collectedByUserId'], String(admin.user));
         assert.equal(receipt.data['recordedByUserId'], String(admin.user));
+        assert.equal(receipt.data['paymentDate'], cashInput.paymentDate);
+        assert.equal(receipt.data['amount'], '150.00');
+        assert.equal(receipt.data['method'], 'CASH');
         assert.equal(receipt.data['receiptNumber'], 'R-' + a.society + '-' + recorded);
         const replay = await committee.request(base, {
           ...cashInput,
@@ -479,6 +482,9 @@ export async function paymentsIntegration(suite: TestContext, db: Connection): P
         const result = await committee.request(base, request);
         assert.equal(result.status, 201);
         const id = String(result.data['paymentId']);
+        const upi = await committee.request(base + '/' + id + '/receipt');
+        assert.equal(upi.data['method'], 'UPI');
+        assert.equal(upi.data['reference'], request.reference);
         const spare = await bill('10.00');
         const duplicate = {
           ...input([{ billId: spare, amount: '1.00' }], '1.00'),
@@ -515,6 +521,25 @@ export async function paymentsIntegration(suite: TestContext, db: Connection): P
           ).status,
           409,
         );
+        const cheque = {
+          ...input([{ billId: spare, amount: '2.37' }], '2.37'),
+          method: 'CHEQUE',
+          reference: 'Synthetic cheque ' + randomUUID(),
+          collectedByUserId: String(accountant.user),
+        };
+        const chequeResult = await committee.request(base, cheque);
+        assert.equal(chequeResult.status, 201);
+        const chequeReceipt = await committee.request(
+          base + '/' + String(chequeResult.data['paymentId']) + '/receipt',
+        );
+        assert.equal(chequeReceipt.status, 200);
+        assert.equal(chequeReceipt.data['method'], 'CHEQUE');
+        assert.equal(chequeReceipt.data['reference'], cheque.reference);
+        assert.equal(chequeReceipt.data['paymentDate'], cheque.paymentDate);
+        assert.equal(chequeReceipt.data['amount'], '2.37');
+        assert.equal(chequeReceipt.data['collectedByUserId'], String(accountant.user));
+        assert.equal(chequeReceipt.data['recordedByUserId'], String(admin.user));
+        assert.equal(await outstanding(spare), '7.63');
       },
     );
     await suite.test(
@@ -591,7 +616,16 @@ export async function paymentsIntegration(suite: TestContext, db: Connection): P
           updated = await module.queries.detail(session, result.replacementPaymentId);
         assert.equal(old.status, 'REVERSED');
         assert.equal(updated.correctedFromPaymentId, original.paymentId);
+        const bankReceipt = await committee.request(
+          base + '/' + result.replacementPaymentId + '/receipt',
+        );
+        assert.equal(bankReceipt.status, 200);
+        assert.equal(bankReceipt.data['method'], 'BANK_TRANSFER');
+        assert.equal(bankReceipt.data['reference'], replacement.reference);
         assert.notEqual(old.receiptNumber, updated.receiptNumber);
+        await assert.rejects(
+          db.execute('UPDATE payments SET amount=1 WHERE id=?', [original.paymentId]),
+        );
         await assert.rejects(db.execute('DELETE FROM payments WHERE id=?', [original.paymentId]));
         await assert.rejects(db.execute('DELETE FROM societies WHERE id=?', [a.society]));
       },
@@ -647,6 +681,71 @@ export async function paymentsIntegration(suite: TestContext, db: Connection): P
         );
         assert.deepEqual(await Promise.all(tables.map(count)), beforeCorrection);
         assert.equal((await module.queries.detail(session, original.paymentId)).status, 'RECORDED');
+      },
+    );
+    await suite.test(
+      'failure on the second allocation rolls back the payment and permits the same-key retry',
+      async () => {
+        // This trigger exists only in the fresh integration schema. The connection flag
+        // isolates fault injection from normal writes and leaves production SQL unchanged.
+        await db.query(`CREATE TRIGGER test_payment_allocation_failure BEFORE INSERT ON payment_allocations
+          FOR EACH ROW BEGIN
+            IF @livora_test_fail_allocations = 1 AND EXISTS(
+              SELECT 1 FROM payment_allocations
+              WHERE society_id=NEW.society_id AND payment_id=NEW.payment_id
+            ) THEN
+              SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Injected failure after first allocation';
+            END IF;
+          END`);
+        class AllocationFailure extends PaymentWriter {
+          override async write(...args: Parameters<PaymentWriter['write']>): Promise<string> {
+            const [connection] = args;
+            await connection.query('SET @livora_test_fail_allocations = 1');
+            try {
+              return await super.write(...args);
+            } finally {
+              await connection.query('SET @livora_test_fail_allocations = NULL');
+            }
+          }
+        }
+        const request = input(
+          [
+            { billId: first, amount: '1.11' },
+            { billId: second, amount: '2.22' },
+          ],
+          '3.33',
+        );
+        const tables = [
+          'payments',
+          'payment_allocations',
+          'receipts',
+          'payment_details',
+          'audit_logs',
+        ] as const;
+        const before = await Promise.all(tables.map(count));
+        const balances = await Promise.all([outstanding(first), outstanding(second)]);
+        await assert.rejects(
+          new PaymentRecording(access, new AllocationFailure()).record(session, request, audit),
+          /Injected failure after first allocation/,
+        );
+        assert.deepEqual(await Promise.all(tables.map(count)), before);
+        assert.deepEqual(await Promise.all([outstanding(first), outstanding(second)]), balances);
+        const [commands] = await db.execute<RowDataPacket[]>(
+          'SELECT id FROM payment_commands WHERE society_id=? AND idempotency_key=?',
+          [a.society, request.idempotencyKey],
+        );
+        assert.equal(commands.length, 0);
+        const retry = await committee.request(base, request);
+        assert.equal(retry.status, 201);
+        assert.equal(retry.data['replayed'], false);
+        const receipt = await committee.request(
+          base + '/' + String(retry.data['paymentId']) + '/receipt',
+        );
+        assert.equal(receipt.data['amount'], '3.33');
+        assert.ok(Array.isArray(receipt.data['allocations']));
+        assert.equal(receipt.data['allocations'].length, 2);
+        assert.equal(await outstanding(first), '99.14');
+        assert.equal(await outstanding(second), '198.53');
       },
     );
     await suite.test(

@@ -74,3 +74,5 @@ Stored instants use UTC `DATETIME(6)` with UTC DB sessions. Display in society t
 Authentication and management use thin Express handlers, services and parameterized SQL under `/api/v1`. Step 8 adds financial recording without a payment gateway; general support access remains a later step. The schema's tenant constraints supplement server session/membership/permission checks.
 
 Step 8: [payment policies/API/rollout](docs/billing/STEP_8_PAYMENTS.md), [additive payment schema 013](docs/database/PAYMENT_SCHEMA.md), [security](docs/security/PAYMENTS.md) and [verification](docs/testing/STEP_8_VERIFICATION.md). Stop/start the owned local stack after checks to safely upgrade without resetting existing accounts.
+
+The [Step 7 and Step 8 checklist verification](docs/testing/STEP_7_8_MANUAL_VERIFICATION.md) records billing/payment checks, regression fixes and the remaining physical print/reconciliation checks.
