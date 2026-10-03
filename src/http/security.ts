@@ -37,6 +37,9 @@ export class Security {
       );
     const paginated =
       propertyList ||
+      /^\/society\/resident\/(?:flats|bills|payments|receipts|notices|complaints)$/.test(
+        request.path,
+      ) ||
       /^\/society\/billing\/payments(?:\/(?:report|collectors|payers|report-collectors))?$/.test(
         request.path,
       ) ||

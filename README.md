@@ -2,7 +2,9 @@
 
 Smart Community Management — Connect. Manage. Live Better.
 
-Steps 1, 3–7 implement the shared-schema database, safe migrations, authentication/authorization, society onboarding, property/resident management, verified resident access and maintenance configuration/bill generation. `../MR_Livora_Frontend` is the separate Angular PWA repository. Follow [AGENTS.md](AGENTS.md) before further work.
+Step 9 adds the [resident portal API and approved privacy policy](docs/resident/STEP_9_RESIDENT_PORTAL.md), [threat model](docs/security/RESIDENT_PORTAL.md) and [verification](docs/testing/STEP_9_VERIFICATION.md). No migration is added; the guarded local stop/start runner rebuilds both apps and updates narrow runtime grants while preserving existing accounts and records.
+
+Steps 1, 3–9 implement the shared-schema database, safe migrations, authentication/authorization, society onboarding, property/resident management, verified resident access, maintenance configuration/billing, payment recording and the resident portal. `../MR_Livora_Frontend` is the separate Angular PWA repository. Follow [AGENTS.md](AGENTS.md) before further work.
 
 Step 7's [billing policies and API](docs/billing/STEP_7_BILLING.md), [additive schema](docs/database/BILLING_SCHEMA.md) and [threat model](docs/security/BILLING.md) cover exact money, full monthly charges without proration, scoped immutable configuration versions, reviewed generation, discounts, idempotency and outstanding reports. Apply migration 012, run `npm run db:billing-permissions` with the migrator and provision its narrow runtime grants before starting the new API. Managed `local:stop` / `local:start` upgrades existing local data without resetting accounts. Step 8 adds payment recording, allocation, immutable receipts and append-only returns/corrections; follow docs/billing/STEP_8_PAYMENTS.md, docs/database/PAYMENT_SCHEMA.md and docs/security/PAYMENTS.md.
 
