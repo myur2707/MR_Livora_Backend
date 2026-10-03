@@ -58,17 +58,19 @@ Local `npm run check` includes offline tests and a tooling build; real-DB tests 
 
 ## Archive, deletion and retention
 
-| Data                                      | Rule                                                                                                                             |
-| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| Society/profile/building/flat/role/charge | Archive or lifecycle deactivate; preserve referenced identifiers                                                                 |
-| User/membership                           | Disable/deactivate; withdraw access without deleting global identity or evidence                                                 |
-| Occupancy                                 | Close dates and preserve history; no silent replacement                                                                          |
-| Invites/registration                      | Preserve decision history; expire/revoke/cancel, not reuse token. Retention and safe PII minimization require reviewed policy    |
-| Bills/items                               | Drafts may be changed under locks; issued rows frozen; append bill adjustments                                                   |
-| Payments/allocations/receipts             | Completed inserts only, UPDATE/DELETE blocked; full-payment reversal appended; no partial refund model yet                       |
-| Audit                                     | Append-only, minimal safe metadata, system actor nullable; retain linked opaque identifiers. No secrets/raw bodies/PII snapshots |
-| Notices/complaints                        | Archive rather than erase published/decided content; audit future state changes                                                  |
+| Data                                      | Rule                                                                                                                                                         |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Society/profile/building/flat/role/charge | Archive or lifecycle deactivate; preserve referenced identifiers                                                                                             |
+| User/membership                           | Disable/deactivate; withdraw access without deleting global identity or evidence                                                                             |
+| Occupancy                                 | Close dates and preserve history; no silent replacement                                                                                                      |
+| Invites/registration                      | Preserve decision history; expire/revoke/cancel, not reuse token. Retention and safe PII minimization require reviewed policy                                |
+| Bills/items                               | Drafts may be changed under locks; issued rows frozen; append bill adjustments                                                                               |
+| Payments/allocations/receipts             | Completed inserts only, UPDATE/DELETE blocked; full-payment reversal appended; partial/full refunds and linked corrections append explicit records in Step 8 |
+| Audit                                     | Append-only, minimal safe metadata, system actor nullable; retain linked opaque identifiers. No secrets/raw bodies/PII snapshots                             |
+| Notices/complaints                        | Archive rather than erase published/decided content; audit future state changes                                                                              |
 
 Retention durations are deliberately not invented. Before production, the society/operator must approve personal-data retention, financial/audit retention and controlled anonymization with applicable requirements. Profile contact/name fields can be minimized under reviewed policy; completed ledger IDs remain. Ordinary runtime users cannot purge history. If later legal erasure requires a change to an immutable record, it needs a separately reviewed, authorized administrative migration and audit trail.
 
 Step 7 adds immutable charge metadata, period kinds, generation idempotency, bill snapshots, audited discount policy and one-time event consumption. See [billing schema](BILLING_SCHEMA.md) for all seven supporting tables, composite foreign keys, indexes and guards, and [approved billing rules](../billing/STEP_7_BILLING.md) for full monthly amounts without proration and informational arrears. Applied migrations 001?011 and existing financial history remain unchanged.
+
+Step 8 migration 013 adds immutable receipt snapshots, physical refunds with original-allocation links, reversal dates and canonical command completion without rewriting applied migrations or baseline payments. See [payment schema](PAYMENT_SCHEMA.md) for tables/FKs/checks/indexes/guards, [payment policies and safe rollout](../billing/STEP_8_PAYMENTS.md) and [payment threat model](../security/PAYMENTS.md). Outstanding now subtracts released refunds from effective nonreversed payments; no writable cached balance or cascade deletion is added.

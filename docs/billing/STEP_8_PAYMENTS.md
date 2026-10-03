@@ -1,0 +1,62 @@
+# Step 8 payment recording
+
+SocietyEase records money physically collected or returned by committee/accountants. It initiates no transfers and integrates no payment gateway. Methods are CASH, UPI, BANK_TRANSFER and CHEQUE. A cheque is recorded only after the committee confirms receipt/clearance; pending cheque processing is outside this step.
+
+## Policies and exact amounts
+
+- One payment covers one flat and 1–50 distinct ISSUED bills in the active society. Several billing periods may be allocated. Use separate payments for different flats. The payer must be a nonarchived society person and needs no account or current occupancy; this permits former residents/third-party payers to settle a flat's debt without granting access.
+- Amounts enter/leave APIs as decimal strings; BigInt minor units handle authoritative arithmetic. No rounding is performed for payment inputs: more than two decimals, zero/negative amounts and values above DECIMAL(12,2) are rejected. All financial columns remain DECIMAL(12,2). Allocation sums must equal the payment amount exactly. Excess payments and unapplied credit are rejected. Changes in bill balances produce a 409 instead of silently reducing allocations.
+- Non-cash recordings require a reference. Within a society, the same method plus trimmed, case-insensitive reference cannot be recorded twice unless the original was fully reversed. This prevents duplicate bank/UPI/cheque entry; record a single transaction across several bills for the same flat. CASH relies on idempotency and receipt/history review: equal cash amounts on the same day may be legitimate separate collections.
+- Payment DATE is the society-local calendar date, at most today. A reversal/refund DATE cannot precede the payment or exceed today. Stored instants are UTC and labeled UTC in receipt display. Historical bill charges remain immutable; outstanding is derived live as net charges minus nonreversed allocations plus released refund allocations. Prior outstanding snapshots stay informational.
+
+## Actors and permissions
+
+Active committee admins and accountants with `society.finance.record` can record. The API accepts `collectedByUserId` only as a proposed selection: it resolves an ACTIVE user, active society membership, unarchived linked society person and unarchived COMMITTEE_ADMIN/ACCOUNTANT role with finance.record. It never accepts membership IDs or a recorder ID. `recordedByUserId` is derived from authentication. Existing membership FKs store the authoritative actor relationships; APIs derive global user IDs through those memberships instead of duplicating identity columns. COMMITTEE_MEMBER and RESIDENT have no collection permission ceiling.
+
+`society.finance.read` gates history, payer/collector name lookups, receipts and reports. `society.finance.reverse` separately gates reversals, refunds and corrections and is available only to committee admins. Corrections also require finance.record. Platform Admin has no automatic finance access. Every service rechecks session expiry, live society context, ACTIVE society, membership and permission in its transaction.
+
+## History and corrections
+
+Full reversal is for an incorrect recording; it appends a reason/date/actor, restores original allocations and preserves the payment/receipt. It does not prove money was physically returned. Full or partial refund records money actually returned, with method/reference/reason/date/actor and explicit amounts released from original bill allocations. Refunds cannot exceed the remaining payment or any original allocation. Released amounts restore debt; canceling charges requires an independent approved charge adjustment.
+
+Corrections append a full reversal and replacement payment/receipt in one transaction. They keep the original flat, may change payer/collector/method/date/reference/notes/allocation/amount within normal validation, and link both directions. Original and replacement remain readable. Correction failure rolls back the reversal as well. Refunded payments cannot also be reversed/corrected; use remaining refunds and a separate new payment if needed. Reversed and fully refunded payments accept no further return. No delete/update financial endpoints exist.
+
+Receipt number `R-{societyId}-{paymentId}` uses MySQL's immutable unsigned payment identity with tenant/payment and tenant/number uniqueness. Concurrent receipts are distinct. Numbers may have gaps and are not promised to be contiguous per society. The same recording/retry returns the existing receipt; there is no user-controlled numbering endpoint. Receipt snapshots preserve society/building/flat/payer/collector/recorder names and INR currency. Live reversal/refund/replacement status remains prominently visible in printable receipts. Legacy receipts are readable with a clear current-name/no-snapshot notice; no invented historical backfill occurs. INR is the currently supported currency; currency conversion/multi-currency accounting is outside this step.
+
+## Transactions, concurrency and idempotency
+
+Mutations lock authenticated actor/session, then the society, then live membership/permission and collector membership/profile rows. Collector global user status is read after acquiring the society lock, without locking another recorder?s global user row; this avoids a collector/actor lock cycle. Recording locks selected bill rows in numeric ID order. Ordinary immutable ledger reads occur after the society lock, avoiding a pre-lock repeatable-read snapshot. The society lock also serializes Step 7 generation, configuration and property changes. This intentionally favors correctness for the modular monolith; a future throughput change must preserve the same invariants.
+
+Payment, allocations, receipt/snapshots, command completion and audit commit atomically. Reversals/refunds/corrections use the same lock/transaction boundary. Canonical normalized amounts and numerically sorted allocations hash into a tenant-scoped immutable command ledger. A 16–80 character idempotency key returns original IDs for the same command/body, conflicts on different content/type/payment, and is shared across payment operation types. Original payment uniqueness also protects legacy keys. Hashes and keys never enter ordinary logs. A rolled-back request can retry. Deadlock/lock-timeout/constraint conflicts are safe 409 responses and retain retry keys.
+
+The browser keeps a UUID in memory for unchanged-request retries, never browser storage. After an uncertain network result, retry unchanged or review history before editing/reloading; a new request key denotes a new operation. Financial data cannot be used offline.
+
+## API contract
+
+All endpoints are under `/api/v1/society/billing/payments`, derive society from authenticated session, send no-store, and reject unknown body/query fields. Mutations require same-origin CSRF and are additionally limited per authenticated user (recording 60/15 minutes, returns 30/15 minutes) under the shared API limit.
+
+| Endpoint                                     | Fields/result                                                                                                                                              |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET base                                     | Paginated history; q (receipt/reference), flatId, from/to, method, collectorUserId, page/pageSize (max 50)                                                 |
+| POST base                                    | flatId, payerPersonId, collectedByUserId, method, paymentDate, amount, reference, notes, allocations[{billId,amount}], idempotencyKey → paymentId/replayed |
+| GET /collectors, /payers, /report-collectors | Paginated tenant-scoped IDs/display names; no emails/mobile/global directory                                                                               |
+| GET /:id                                     | Payment, immutable receipt, original allocations, refunds, reversal and correction links                                                                   |
+| GET /:id/receipt                             | Same authorized receipt view; no creation; no cross-society lookup                                                                                         |
+| POST /:id/reverse                            | reason, operationDate, idempotencyKey                                                                                                                      |
+| POST /:id/refund                             | reason, operationDate, idempotencyKey, amount, method, reference, allocations[{billId,amount}]                                                             |
+| POST /:id/correct                            | reason, operationDate, idempotencyKey, replacement (record fields excluding key)                                                                           |
+| GET /report                                  | Paginated ledger events and exact collections/refunds/reversals/netRecorded totals with the history filters                                                |
+
+Bill lookup adds an ISSUED-only status filter and optional `flatId` to the existing paginated billing bills endpoint. Corrections preview available balances plus original allocations before the original is reversed; the server validates again after reversing within its transaction.
+
+## Reconciliation/report semantics
+
+The report includes positive collections on paymentDate, negative physical refunds on refund date and negative bookkeeping reversals on reversal date. Replacement corrections are positive collections on the replacement's payment date. Backdated corrections can affect a historical date range: use immutable recordedAt/audit history for the time the entry was made. Original collector filters apply to all events associated with that payment; method filters use the actual refund method for refund events. Report/history collector choices include collectors with recorded payments, including archived/disabled users, using the latest receipt snapshot name (legacy current-name fallback). Creation choices list only eligible active collectors. Default all-method totals describe a recorded ledger, not cash in a drawer. Select CASH to see cash events and interpret physical refunds separately from bookkeeping reversals. All-time net = original amounts − full reversed amounts − refund amounts = effective allocations for Step 8 payments. Legacy reversals without an operation-date extension use the stored UTC creation calendar date; they are not backfilled. Legacy unallocated payments, if present, require operator reconciliation and are not silently repaired.
+
+## Safe rollout
+
+Apply additive migration 013 after 001–012 using the migration identity, then run `npm run db:billing-permissions` (now includes finance.reverse) and provision the narrowly scoped grants in `src/database/billing-grants.ts`. It adds reverse only to existing unarchived canonical committee-admin roles already holding finance.read AND finance.record. Intentionally restricted roles and Platform Admin retain their restrictions. New society setup uses the updated role ceilings. Runtime grants permit SELECT/INSERT on payment ledgers and no UPDATE/DELETE on completed finance or audits. Managed `local:start` safely applies additive migrations/grants and preserves accounts; stop/start after tests finish to refresh builds. Do not rerun development seed/reset credentials.
+
+Migration 013 creates only five tables and sixteen triggers. MySQL DDL is not transactionally reversible: do not automatically remove these tables or retry partial history. On partial failure inspect operator status, reconcile executed DDL and follow the migration recovery plan. Rolling back application code leaves additive data intact. Stop payment writes before downgrading: Step 7 code predating refunds would misreport paid balances. There are no destructive down scripts.
+
+The explicit collector `FOR SHARE OF m,l,sp` scope follows the [MySQL 8.4 SELECT locking-clause documentation](https://dev.mysql.com/doc/refman/8.4/en/select.html). Nonlocked joined user status is validated at the protected transaction snapshot. Future global account administration must preserve the documented lock order rather than acquiring tenant locks after locking unrelated user rows.

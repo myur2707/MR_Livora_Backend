@@ -1,6 +1,7 @@
 import { propertyIntegration } from './property.integration.js';
 import { residentAccessIntegration } from './resident-access.integration.js';
 import { billingIntegration } from './billing.integration.js';
+import { paymentsIntegration } from './payments.integration.js';
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
@@ -543,6 +544,12 @@ void test('MySQL 8.4 schema and security invariants on an empty disposable schem
       'billing transactions, money, concurrency and tenant boundaries',
       async (billing) => {
         await billingIntegration(billing, db);
+      },
+    );
+    await suite.test(
+      'payment allocation, refunds, receipts, races and reconciliation',
+      async (payments) => {
+        await paymentsIntegration(payments, db);
       },
     );
   } finally {

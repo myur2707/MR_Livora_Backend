@@ -1,6 +1,6 @@
 # Local manual testing on Windows
 
-The managed setup runs the implemented Steps 1–5 locally: the database, Angular shared components/PWA, cookie sessions, login/logout, password reset, roles and society switching. Step 4 adds limited platform metadata, initial society setup and committee verification. Step 5 adds building/flat/resident management, occupancy history and reviewed CSV imports. Billing, payments, notices and complaints remain later steps.
+The managed setup runs the implemented Steps 1–5 locally: the database, Angular shared components/PWA, cookie sessions, login/logout, password reset, roles and society switching. Step 4 adds limited platform metadata, initial society setup and committee verification. Step 5 adds building/flat/resident management, occupancy history and reviewed CSV imports. Steps 6?8 also provide verified resident access, maintenance billing and payment recording/receipts/returns/reports; notices and complaints remain later steps. See [Step 8 verification and retained demo](STEP_8_VERIFICATION.md).
 
 ## Start, stop and restart
 

@@ -127,7 +127,8 @@ export const listQuery = z.strictObject({
   q: z.string().trim().max(100).default(''),
   buildingId: identifier.optional(),
   periodId: identifier.optional(),
-  status: z.enum(['ALL', 'OUTSTANDING', 'SETTLED']).default('ALL'),
+  flatId: identifier.optional(),
+  status: z.enum(['ALL', 'ISSUED', 'OUTSTANDING', 'SETTLED']).default('ALL'),
 });
 export type ConfigurationInput = z.infer<typeof configurationInput>;
 export type PreviewInput = z.infer<typeof previewInput>;

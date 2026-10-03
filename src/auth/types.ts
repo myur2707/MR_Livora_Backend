@@ -12,6 +12,7 @@ export const permissions = [
   'society.finance.configure',
   'society.finance.generate',
   'society.finance.discount',
+  'society.finance.reverse',
   'society.members.manage',
 ] as const;
 export type Permission = (typeof permissions)[number];

@@ -4,7 +4,7 @@ Smart Community Management — Connect. Manage. Live Better.
 
 Steps 1, 3–7 implement the shared-schema database, safe migrations, authentication/authorization, society onboarding, property/resident management, verified resident access and maintenance configuration/bill generation. `../MR_Livora_Frontend` is the separate Angular PWA repository. Follow [AGENTS.md](AGENTS.md) before further work.
 
-Step 7's [billing policies and API](docs/billing/STEP_7_BILLING.md), [additive schema](docs/database/BILLING_SCHEMA.md) and [threat model](docs/security/BILLING.md) cover exact money, full monthly charges without proration, scoped immutable configuration versions, reviewed generation, discounts, idempotency and outstanding reports. Apply migration 012, run `npm run db:billing-permissions` with the migrator and provision its narrow runtime grants before starting the new API. Managed `local:stop` / `local:start` upgrades existing local data without resetting accounts. Payment recording remains a later step.
+Step 7's [billing policies and API](docs/billing/STEP_7_BILLING.md), [additive schema](docs/database/BILLING_SCHEMA.md) and [threat model](docs/security/BILLING.md) cover exact money, full monthly charges without proration, scoped immutable configuration versions, reviewed generation, discounts, idempotency and outstanding reports. Apply migration 012, run `npm run db:billing-permissions` with the migrator and provision its narrow runtime grants before starting the new API. Managed `local:stop` / `local:start` upgrades existing local data without resetting accounts. Step 8 adds payment recording, allocation, immutable receipts and append-only returns/corrections; follow docs/billing/STEP_8_PAYMENTS.md, docs/database/PAYMENT_SCHEMA.md and docs/security/PAYMENTS.md.
 
 Authentication setup, API contracts, runtime DB grants, SMTP and the optional isolated development seed are documented in [authentication](docs/security/AUTHENTICATION.md), with a [threat model](docs/security/THREAT_MODEL.md) and [additive auth schema](docs/database/AUTH_SCHEMA.md). Apply migrations 006–007 with the migrator before starting the API; use separate APP_DB_USER/APP_DB_PASSWORD runtime credentials. Run `npm run dev` locally or `npm run build` then `npm start` for compiled execution. Both API and Angular must use the same browser origin.
 
@@ -54,7 +54,7 @@ To run integration tests, separately provision a **new, empty loopback** schema 
 npm run test:db
 ```
 
-Integration tests additionally require explicit APP_DB_USER, APP_DB_PASSWORD and DB_TEST_ADMIN_PASSWORD for the isolated service. The guarded test provisioner grants restricted runtime privileges after migration and verifies denied DDL, finance reads and role/audit writes. CI uses disposable service credentials. Administrator settings are test-only and never consumed by the server.
+Integration tests additionally require explicit APP_DB_USER, APP_DB_PASSWORD and DB_TEST_ADMIN_PASSWORD for the isolated service. The guarded test provisioner grants restricted runtime privileges after migration and verifies denied DDL, completed-finance rewrites/deletes and role/audit writes. CI uses disposable service credentials. Administrator settings are test-only and never consumed by the server.
 
 CI uses `npm audit`, weekly Dependabot updates and a checksum-verified, version-pinned Gitleaks binary to scan repository history locally. No paid scanning account or source-uploading service is required. Local secret scanning should include changed/untracked nonignored source files as well as Git history.
 
@@ -71,4 +71,6 @@ CI uses `npm audit`, weekly Dependabot updates and a checksum-verified, version-
 
 Stored instants use UTC `DATETIME(6)` with UTC DB sessions. Display in society timezone (`Asia/Kolkata` by default); `DATE` fields are society-local calendar dates. Financial DECIMAL and BIGINT values remain strings at JavaScript boundaries. Completed financial and audit records are append-only, with explicit adjustment/reversal records.
 
-Authentication and management use thin Express handlers, services and parameterized SQL under `/api/v1`. General support access and financial business APIs remain later steps. The schema's tenant constraints supplement server session/membership/permission checks.
+Authentication and management use thin Express handlers, services and parameterized SQL under `/api/v1`. Step 8 adds financial recording without a payment gateway; general support access remains a later step. The schema's tenant constraints supplement server session/membership/permission checks.
+
+Step 8: [payment policies/API/rollout](docs/billing/STEP_8_PAYMENTS.md), [additive payment schema 013](docs/database/PAYMENT_SCHEMA.md), [security](docs/security/PAYMENTS.md) and [verification](docs/testing/STEP_8_VERIFICATION.md). Stop/start the owned local stack after checks to safely upgrade without resetting existing accounts.

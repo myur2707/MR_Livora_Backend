@@ -10,6 +10,7 @@ import type { OnboardingService } from '../onboarding/service.js';
 import type { InvitationService } from '../onboarding/invitations.js';
 import { residentAccessRouter, type ResidentAccessModule } from '../resident-access/router.js';
 import { billingRouter, type BillingModule } from '../billing/router.js';
+import { paymentRouter, type PaymentModule } from '../payments/router.js';
 
 const email = z
   .string()
@@ -43,6 +44,7 @@ export function createApp(
   property?: PropertyModule,
   residentAccess?: ResidentAccessModule,
   billing?: BillingModule,
+  payments?: PaymentModule,
 ) {
   const app = express();
   const security = new Security(auth);
@@ -157,6 +159,7 @@ export function createApp(
   if (onboarding)
     app.use('/api/v1', onboardingRouter(security, onboarding.service, onboarding.invitations));
   if (residentAccess) app.use('/api/v1', residentAccessRouter(security, residentAccess));
+  if (payments) app.use('/api/v1', paymentRouter(security, payments));
   if (billing) app.use('/api/v1', billingRouter(security, billing));
   if (property) app.use('/api/v1', propertyRouter(security, property));
   app.use(() => {

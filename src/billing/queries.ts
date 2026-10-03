@@ -18,19 +18,23 @@ export class BillingQueries {
         (outstandingOnly ? " AND b.status='ISSUED'" : '') +
         (query.periodId ? ' AND b.billing_period_id=?' : '') +
         (query.buildingId ? ' AND f.building_id=?' : '') +
+        (query.flatId ? ' AND b.flat_id=?' : '') +
         " AND b.bill_number LIKE ? ESCAPE '='";
       const values: (string | number)[] = [scope.societyId];
       if (query.periodId) values.push(query.periodId);
       if (query.buildingId) values.push(query.buildingId);
+      if (query.flatId) values.push(query.flatId);
       values.push('%' + query.q.replace(/[=%_]/g, '=$&') + '%');
       const source = '(SELECT ' + details + joins + where + ') report';
       const remaining = '(gross-credits-paid)';
       const status =
         outstandingOnly || query.status === 'OUTSTANDING'
-          ? ' WHERE ' + remaining + '>0'
+          ? " WHERE status='ISSUED' AND " + remaining + '>0'
           : query.status === 'SETTLED'
             ? " WHERE status='ISSUED' AND " + remaining + '<=0'
-            : '';
+            : query.status === 'ISSUED'
+              ? " WHERE status='ISSUED'"
+              : '';
       const summary = await rows<
         RowDataPacket & { total: number; outstanding: string; creditBalance: string }
       >(

@@ -7,6 +7,11 @@ export const billingTables = [
   'billing_bill_details',
   'billing_discount_details',
   'one_time_charge_applications',
+  'payment_details',
+  'payment_refunds',
+  'payment_refund_allocations',
+  'payment_reversal_details',
+  'payment_commands',
 ] as const;
 export async function grantBillingRuntime(
   db: Connection,
@@ -27,10 +32,12 @@ export async function grantBillingRuntime(
     'bills',
     'bill_items',
     'bill_adjustments',
+    'payments',
+    'payment_allocations',
+    'payment_reversals',
+    'receipts',
   ])
     await db.query('GRANT SELECT,INSERT ON ' + schema + '.' + table + ' TO ?@?', [user, host]);
-  for (const table of ['payments', 'payment_allocations', 'payment_reversals'])
-    await db.query('GRANT SELECT ON ' + schema + '.' + table + ' TO ?@?', [user, host]);
   await db.query(
     'GRANT UPDATE(status,issued_at,issued_by_membership_id) ON ' + schema + '.bills TO ?@?',
     [user, host],
@@ -47,6 +54,7 @@ export async function provisionBillingPermissions(db: Connection): Promise<void>
       'society.finance.configure',
       'society.finance.generate',
       'society.finance.discount',
+      'society.finance.reverse',
     ]) {
       await db.execute(
         'INSERT INTO permissions(code,description) VALUES(?,?) ON DUPLICATE KEY UPDATE code=VALUES(code)',
