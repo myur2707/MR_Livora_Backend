@@ -9,6 +9,7 @@ import {
   createSocietySchema,
   pageSchema,
   residentPageSchema,
+  structurePageSchema,
   inviteSchema,
   transitionSchema,
   buildingSchema,
@@ -53,16 +54,19 @@ export function onboardingRouter(
     router.get(prefix, ...guards, async (r, s) =>
       s.json(await onboarding.detail(session(r), id(r), scope)),
     );
-    router.get(prefix + '/structure', ...guards, async (r, s) =>
+    router.get(prefix + '/structure', ...guards, async (r, s) => {
+      const query = parse(structurePageSchema, r.query);
       s.json(
         await onboarding.structure(
           session(r),
           id(r),
           scope,
-          parse(residentPageSchema, r.query).page,
+          query.page,
+          query.propertyType,
+          query.search,
         ),
-      ),
-    );
+      );
+    });
     router.post(prefix + '/buildings/batch', security.csrf, ...guards, async (r, s) => {
       await onboarding.buildingBatch(
         session(r),

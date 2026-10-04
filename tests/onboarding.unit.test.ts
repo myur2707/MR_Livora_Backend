@@ -10,10 +10,35 @@ import {
   buildingBatchSchema,
   rowHousesSchema,
   residentSchema,
+  structurePageSchema,
   maintenanceSchema,
   createSocietySchema,
   pageSchema,
 } from '../src/onboarding/contracts.js';
+void test('resident property choices and structure filters reject unsupported types and scope overrides', () => {
+  for (const propertyType of ['FLAT', 'ROW_HOUSE']) {
+    assert.equal(parse(structurePageSchema, { propertyType, page: '2' }).page, 2);
+    assert.equal(
+      parse(residentSchema, {
+        revision: '1',
+        flatId: '2',
+        propertyType,
+        displayName: 'Resident',
+        occupancyType: 'OWNER',
+        startsOn: '2026-10-04',
+        endsOn: null,
+      }).propertyType,
+      propertyType,
+    );
+  }
+  assert.throws(() => parse(structurePageSchema, { propertyType: 'OTHER' }));
+  assert.throws(() => parse(structurePageSchema, { propertyType: 'FLAT', societyId: '2' }));
+  assert.equal(
+    parse(structurePageSchema, { propertyType: 'ROW_HOUSE', search: ' 101 ' }).search,
+    '101',
+  );
+  assert.throws(() => parse(structurePageSchema, { search: 'x'.repeat(81) }));
+});
 void test('identifiers reject malformed values before integer conversion and retain unsigned limits', () => {
   for (const value of [
     '1 OR 1=1',

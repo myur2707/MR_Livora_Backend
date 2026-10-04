@@ -365,6 +365,18 @@ export async function onboardingIntegration(suite: TestContext, db: Connection):
           [id],
         );
         assert.equal(Number(units[0]?.['total']), 7);
+        const housePage = await platform.request(
+          '/platform/societies/' + id + '/structure?propertyType=ROW_HOUSE',
+        );
+        assert.equal(housePage.status, 200);
+        assert.equal(housePage.data['total'], 7);
+        assert.ok(Array.isArray(housePage.data['items']));
+        assert.equal(housePage.data['items'].length, 7);
+        const flatPage = await platform.request(
+          '/platform/societies/' + id + '/structure?propertyType=FLAT',
+        );
+        assert.equal(flatPage.status, 200);
+        assert.equal(flatPage.data['total'], 0);
         const [audits] = await db.execute<RowDataPacket[]>(
           'SELECT COUNT(*) AS total FROM audit_logs WHERE society_id=? AND action=?',
           [id, 'building.created'],
@@ -593,6 +605,54 @@ export async function onboardingIntegration(suite: TestContext, db: Connection):
         assert.equal(firstPage.data['items'].length, 50);
         assert.equal(nextPage.data['items'].length, 2);
         assert.equal(firstPage.data['total'], 52);
+        const filtered = await committee.request(
+          '/onboarding/societies/' + society + '/structure?page=2&propertyType=FLAT',
+        );
+        assert.equal(filtered.status, 200);
+        assert.equal(filtered.data['total'], 52);
+        assert.ok(Array.isArray(filtered.data['items']));
+        assert.equal(filtered.data['items'].length, 2);
+        const searched = await committee.request(
+          '/onboarding/societies/' + society + '/structure?propertyType=FLAT&search=201',
+        );
+        assert.equal(searched.status, 200);
+        assert.equal(searched.data['total'], 1);
+        assert.match(searched.raw, /"flatNumber":"201"/);
+        for (const search of ['%25', '_']) {
+          const literal = await committee.request(
+            '/onboarding/societies/' + society + '/structure?propertyType=FLAT&search=' + search,
+          );
+          assert.equal(literal.status, 200);
+          assert.equal(literal.data['total'], 0);
+        }
+        const houses = await committee.request(
+          '/onboarding/societies/' + society + '/structure?propertyType=ROW_HOUSE',
+        );
+        assert.equal(houses.status, 200);
+        assert.equal(houses.data['total'], 0);
+        assert.deepEqual(houses.data['items'], []);
+        assert.equal(
+          (
+            await outsider.request(
+              '/onboarding/societies/' + society + '/structure?propertyType=FLAT',
+            )
+          ).status,
+          404,
+        );
+        assert.equal(
+          (
+            await committee.request('/onboarding/societies/' + society + '/residents', {
+              revision: await revision(committee, society, 'onboarding'),
+              flatId: flat,
+              propertyType: 'ROW_HOUSE',
+              displayName: 'Mismatched property',
+              occupancyType: 'OWNER',
+              startsOn: '2026-10-04',
+              endsOn: null,
+            })
+          ).status,
+          404,
+        );
         assert.equal(
           (await committee.request('/onboarding/societies/' + society + '/structure?sort=password'))
             .status,

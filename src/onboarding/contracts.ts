@@ -101,6 +101,7 @@ export const residentSchema = z
   .strictObject({
     ...revision,
     flatId: identifier,
+    propertyType: z.enum(['FLAT', 'ROW_HOUSE']).optional(),
     displayName: text(160),
     occupancyType: z.enum(['OWNER', 'TENANT', 'FAMILY_MEMBER', 'AUTHORIZED_OCCUPANT']),
     startsOn: date,
@@ -123,6 +124,10 @@ export const acceptSchema = z.strictObject({
 export const inspectSchema = acceptSchema.omit({ password: true });
 export const residentPageSchema = z.strictObject({
   page: z.coerce.number().int().min(1).max(10000).default(1),
+});
+export const structurePageSchema = residentPageSchema.extend({
+  propertyType: z.enum(['FLAT', 'ROW_HOUSE']).optional(),
+  search: z.string().trim().max(80).optional(),
 });
 export const pageSchema = z.strictObject({
   page: z.coerce.number().int().min(1).max(10000).default(1),

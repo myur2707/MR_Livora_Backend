@@ -248,15 +248,44 @@ export class OnboardingService {
         [id, building, flat.number, flat.areaSqFt],
       );
   }
-  async structure(session: Session, id: string, scope: Scope, page: number) {
+  async structure(
+    session: Session,
+    id: string,
+    scope: Scope,
+    page: number,
+    propertyType?: 'FLAT' | 'ROW_HOUSE',
+    search?: string,
+  ) {
     return this.repository.database.transaction(async (db) => {
       await this.repository.access(db, session, id, scope);
+      const typeFilter = propertyType ? ' AND (b.code=?)=?' : '';
+      const searchFilter = search
+        ? " AND (f.flat_number LIKE ? ESCAPE '=' OR b.code LIKE ? ESCAPE '=' OR b.name LIKE ? ESCAPE '=')"
+        : '';
+      const pattern = search
+        ? '%' + search.replaceAll('=', '==').replaceAll('%', '=%').replaceAll('_', '=_') + '%'
+        : null;
+      const values = [
+        id,
+        ...(propertyType ? ['ROW_HOUSES', propertyType === 'ROW_HOUSE' ? 1 : 0] : []),
+        ...(pattern ? [pattern, pattern, pattern] : []),
+      ];
       const items = await rows(
         db,
-        'SELECT f.id,b.name AS buildingName,b.code AS buildingCode,f.flat_number AS flatNumber,f.area_sq_ft AS areaSqFt FROM flats f JOIN buildings b ON b.society_id=f.society_id AND b.id=f.building_id WHERE f.society_id=? AND f.archived_at IS NULL AND b.archived_at IS NULL ORDER BY b.id,f.id LIMIT 50 OFFSET ?',
-        [id, (page - 1) * 50],
+        'SELECT f.id,b.name AS buildingName,b.code AS buildingCode,f.flat_number AS flatNumber,f.area_sq_ft AS areaSqFt FROM flats f JOIN buildings b ON b.society_id=f.society_id AND b.id=f.building_id WHERE f.society_id=? AND f.archived_at IS NULL AND b.archived_at IS NULL' +
+          typeFilter +
+          searchFilter +
+          ' ORDER BY b.id,f.id LIMIT 50 OFFSET ?',
+        [...values, (page - 1) * 50],
       );
-      const total = Number((await this.repository.counts(db, id)).flats);
+      const count = await rows(
+        db,
+        'SELECT COUNT(*) AS total FROM flats f JOIN buildings b ON b.society_id=f.society_id AND b.id=f.building_id WHERE f.society_id=? AND f.archived_at IS NULL AND b.archived_at IS NULL' +
+          typeFilter +
+          searchFilter,
+        values,
+      );
+      const total = Number(count[0]?.['total']);
       return { items, total, page, pageSize: 50 };
     });
   }
@@ -267,8 +296,12 @@ export class OnboardingService {
         !(
           await rows(
             db,
-            'SELECT id FROM flats WHERE society_id=? AND id=? AND archived_at IS NULL FOR SHARE',
-            [id, input.flatId],
+            'SELECT f.id FROM flats f JOIN buildings b ON b.society_id=f.society_id AND b.id=f.building_id WHERE f.society_id=? AND f.id=? AND f.archived_at IS NULL AND b.archived_at IS NULL' +
+              (input.propertyType ? ' AND (b.code=?)=?' : '') +
+              ' FOR SHARE',
+            input.propertyType
+              ? [id, input.flatId, 'ROW_HOUSES', input.propertyType === 'ROW_HOUSE' ? 1 : 0]
+              : [id, input.flatId],
           )
         ).length
       )
