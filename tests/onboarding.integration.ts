@@ -41,6 +41,7 @@ export async function onboardingIntegration(suite: TestContext, db: Connection):
     logs.push(code);
   };
   const queue = new ResetQueue(log);
+  let clockOffset = 0;
   const auth = await AuthService.create(
     new AuthRepository(database),
     {
@@ -54,6 +55,7 @@ export async function onboardingIntegration(suite: TestContext, db: Connection):
     },
     { send: () => Promise.resolve() },
     queue,
+    () => Date.now() + clockOffset,
   );
   const service = new OnboardingService(new OnboardingRepository(database));
   const delivered: { email: string; link: string }[] = [];
@@ -210,6 +212,198 @@ export async function onboardingIntegration(suite: TestContext, db: Connection):
           'pendingVerification',
           'updatedAt',
         ]);
+      },
+    );
+    await suite.test(
+      'multi-wing batches are atomic, revision locked, tenant authorized and audited',
+      async () => {
+        // Independent scenarios use separate API-rate windows without changing production limits.
+        clockOffset += 60_000;
+        const id = await create('STEP4_BATCH');
+        const path = '/platform/societies/' + id + '/buildings/batch';
+        const wing = (code: string) => ({
+          code,
+          name: 'Wing ' + code,
+          flats: [
+            { number: '101', areaSqFt: null },
+            { number: '102', areaSqFt: null },
+          ],
+        });
+        let body = {
+          revision: await revision(platform, id),
+          buildings: ['A', 'B', 'C', 'D'].map(wing),
+        };
+        assert.equal((await platform.request(path, body)).status, 409, 'Draft is not editable');
+        assert.equal((await transition(id, 'SETUP_IN_PROGRESS')).status, 204);
+        body = { ...body, revision: await revision(platform, id) };
+        assert.equal((await anonymous.request(path, body)).status, 401);
+        assert.equal((await outsider.request(path, body)).status, 403);
+        assert.equal(
+          (await outsider.request('/onboarding/societies/' + id + '/buildings/batch', body)).status,
+          404,
+        );
+        assert.equal(
+          (await platform.request(path, body, { 'X-CSRF-Token': 'forged' })).status,
+          403,
+        );
+        assert.equal((await platform.request(path, { ...body, society_id: society })).status, 400);
+        const results = await Promise.all([
+          platform.request(path, body),
+          platform.request(path, body),
+        ]);
+        assert.deepEqual(results.map((r) => r.status).sort(), [201, 409]);
+        const current = await detail(platform, id);
+        assert.equal(Number(current['revision']), Number(body.revision) + 1);
+        const [counts] = await db.execute<RowDataPacket[]>(
+          'SELECT COUNT(*) AS total FROM flats WHERE society_id=?',
+          [id],
+        );
+        assert.equal(Number(counts[0]?.['total']), 8);
+        const before = await revision(platform, id);
+        assert.equal(
+          (await platform.request(path, { revision: before, buildings: [wing('E'), wing('A')] }))
+            .status,
+          409,
+        );
+        assert.equal(
+          await revision(platform, id),
+          before,
+          'Failed batch must not advance revision',
+        );
+        const [rolledBack] = await db.execute<RowDataPacket[]>(
+          'SELECT COUNT(*) AS total FROM buildings WHERE society_id=? AND code=?',
+          [id, 'E'],
+        );
+        assert.equal(
+          Number(rolledBack[0]?.['total']),
+          0,
+          'Earlier wing must roll back on later conflict',
+        );
+        const [audits] = await db.execute<RowDataPacket[]>(
+          'SELECT COUNT(*) AS total FROM audit_logs WHERE society_id=? AND action=?',
+          [id, 'building.created'],
+        );
+        assert.equal(Number(audits[0]?.['total']), 4, 'Only committed wings are audited');
+        const large = {
+          revision: before,
+          buildings: Array.from({ length: 5 }, (_, index) => ({
+            code: 'L' + index,
+            name: 'Large wing ' + index,
+            flats: Array.from({ length: 100 }, (_, number) => ({
+              number: String(number).padStart(32, '0'),
+              areaSqFt: null,
+            })),
+          })),
+        };
+        assert.ok(Buffer.byteLength(JSON.stringify(large)) > 16 * 1024);
+        assert.equal(
+          (await platform.request(path, large)).status,
+          201,
+          'Maximum-size valid batch must fit its bounded JSON parser',
+        );
+        assert.equal(
+          (
+            await platform.request(path, {
+              revision: before,
+              buildings: [],
+              padding: 'x'.repeat(129 * 1024),
+            })
+          ).status,
+          413,
+        );
+
+        clockOffset += 60_000;
+      },
+    );
+    await suite.test(
+      'row houses reuse a scoped group and roll back duplicate ranges with revision and security checks',
+      async () => {
+        clockOffset += 60_000;
+        const id = await create('STEP4_HOUSES');
+        const path = '/platform/societies/' + id + '/row-houses';
+        const houses = (numbers: string[]) => numbers.map((number) => ({ number, areaSqFt: null }));
+        let body = {
+          revision: await revision(platform, id),
+          houses: houses(['1', '2', '3', '4', '5']),
+        };
+        assert.equal((await platform.request(path, body)).status, 409);
+        await transition(id, 'SETUP_IN_PROGRESS');
+        body = { ...body, revision: await revision(platform, id) };
+        assert.equal((await anonymous.request(path, body)).status, 401);
+        assert.equal((await outsider.request(path, body)).status, 403);
+        assert.equal(
+          (await outsider.request('/onboarding/societies/' + id + '/row-houses', body)).status,
+          404,
+        );
+        assert.equal(
+          (await platform.request(path, body, { 'X-CSRF-Token': 'forged' })).status,
+          403,
+        );
+        assert.equal((await platform.request(path, { ...body, societyId: society })).status, 400);
+        const results = await Promise.all([
+          platform.request(path, body),
+          platform.request(path, body),
+        ]);
+        assert.deepEqual(results.map((r) => r.status).sort(), [201, 409]);
+        const before = await revision(platform, id);
+        assert.equal(
+          (await platform.request(path, { revision: before, houses: houses(['6', '5']) })).status,
+          409,
+        );
+        assert.equal(await revision(platform, id), before);
+        assert.equal(
+          (await platform.request(path, { revision: before, houses: houses(['6', '7']) })).status,
+          201,
+        );
+        const [groups] = await db.execute<RowDataPacket[]>(
+          'SELECT COUNT(*) AS total FROM buildings WHERE society_id=? AND code=?',
+          [id, 'ROW_HOUSES'],
+        );
+        assert.equal(Number(groups[0]?.['total']), 1);
+        const [units] = await db.execute<RowDataPacket[]>(
+          'SELECT COUNT(*) AS total FROM flats WHERE society_id=?',
+          [id],
+        );
+        assert.equal(Number(units[0]?.['total']), 7);
+        const [audits] = await db.execute<RowDataPacket[]>(
+          'SELECT COUNT(*) AS total FROM audit_logs WHERE society_id=? AND action=?',
+          [id, 'building.created'],
+        );
+        assert.equal(Number(audits[0]?.['total']), 2);
+        const large = {
+          revision: await revision(platform, id),
+          houses: Array.from({ length: 200 }, (_, n) => ({
+            number: '漢'.repeat(29) + String(n).padStart(3, '0'),
+            areaSqFt: '99999999.99',
+          })),
+        };
+        assert.ok(Buffer.byteLength(JSON.stringify(large)) > 16 * 1024);
+        assert.equal(
+          (await platform.request(path, large)).status,
+          201,
+          'All 200 houses must fit the bounded request parser',
+        );
+        const afterLarge = await revision(platform, id);
+        assert.equal(
+          (
+            await platform.request(path, {
+              revision: afterLarge,
+              houses: [...large.houses, { number: '208', areaSqFt: '99999999.99' }],
+            })
+          ).status,
+          400,
+        );
+        assert.equal(await revision(platform, id), afterLarge);
+        const [allUnits] = await db.execute<RowDataPacket[]>(
+          'SELECT COUNT(*) AS total FROM flats WHERE society_id=?',
+          [id],
+        );
+        assert.equal(Number(allUnits[0]?.['total']), 207);
+        assert.equal(
+          (await platform.request(path, { ...large, padding: 'x'.repeat(33 * 1024) })).status,
+          413,
+        );
+        clockOffset += 60_000;
       },
     );
     await suite.test(

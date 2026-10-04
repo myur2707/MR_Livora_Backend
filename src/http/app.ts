@@ -65,6 +65,20 @@ export function createApp(
       express.json({ limit: '400kb', strict: true }),
       (_request, _response, next) => next(),
     );
+  if (onboarding)
+    app.post(
+      /^\/api\/v1\/(?:platform|onboarding)\/societies\/[1-9][0-9]*\/buildings\/batch$/,
+      security.authenticated,
+      express.json({ limit: '128kb', strict: true }),
+      (_request, _response, next) => next(),
+    );
+  if (onboarding)
+    app.post(
+      /^\/api\/v1\/(?:platform|onboarding)\/societies\/[1-9][0-9]*\/row-houses$/,
+      security.authenticated,
+      express.json({ limit: '32kb', strict: true }),
+      (_request, _response, next) => next(),
+    );
   app.use('/api/v1', express.json({ limit: '16kb', strict: true }));
   const router = express.Router();
   router.get('/auth/csrf', async (request, response) => {

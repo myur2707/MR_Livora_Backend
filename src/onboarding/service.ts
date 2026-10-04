@@ -6,6 +6,8 @@ import { sqlTime } from '../auth/repository.js';
 import type {
   CreateSociety,
   BuildingInput,
+  BuildingBatchInput,
+  RowHousesInput,
   ResidentInput,
   MaintenanceInput,
   SocietyStatus,
@@ -171,19 +173,80 @@ export class OnboardingService {
   ) {
     await this.change(session, id, scope, input.revision, async (db, setup, actor) => {
       assertEditable(setup.status);
-      const building = await insert(
-        db,
-        'INSERT INTO buildings(society_id,code,name) VALUES(?,?,?)',
-        [id, input.code, input.name],
-      );
-      for (const flat of input.flats)
-        await db.execute(
-          'INSERT INTO flats(society_id,building_id,flat_number,area_sq_ft) VALUES(?,?,?,?)',
-          [id, building, flat.number, flat.areaSqFt],
-        );
+      await this.insertBuilding(db, id, input);
       await this.repository.advance(db, setup);
       await this.repository.event(db, setup, actor, 'building.created', audit);
     });
+  }
+  async buildingBatch(
+    session: Session,
+    id: string,
+    scope: Scope,
+    input: BuildingBatchInput,
+    audit: RequestAudit,
+  ) {
+    await this.change(session, id, scope, input.revision, async (db, setup, actor) => {
+      assertEditable(setup.status);
+      for (const building of input.buildings) await this.insertBuilding(db, id, building);
+      await this.repository.advance(db, setup);
+      for (let index = 0; index < input.buildings.length; index++) {
+        await this.repository.event(db, setup, actor, 'building.created', audit);
+      }
+    });
+  }
+  async rowHouses(
+    session: Session,
+    id: string,
+    scope: Scope,
+    input: RowHousesInput,
+    audit: RequestAudit,
+  ) {
+    await this.change(session, id, scope, input.revision, async (db, setup, actor) => {
+      assertEditable(setup.status);
+      // Reuse one tenant-scoped group so later ranges retain house-number uniqueness.
+      const groups = await rows(
+        db,
+        'SELECT id,name,archived_at FROM buildings WHERE society_id=? AND code=?',
+        [id, 'ROW_HOUSES'],
+      );
+      const group = groups[0];
+      if (group && (group['name'] !== 'Row houses' || group['archived_at'] !== null))
+        throw new ApiError(409, 'CONFLICT', 'The row house group is unavailable.');
+      const building = group
+        ? String(group['id'])
+        : await insert(db, 'INSERT INTO buildings(society_id,code,name) VALUES(?,?,?)', [
+            id,
+            'ROW_HOUSES',
+            'Row houses',
+          ]);
+      await this.insertFlats(db, id, building, input.houses);
+      await this.repository.advance(db, setup);
+      await this.repository.event(db, setup, actor, 'building.created', audit);
+    });
+  }
+  private async insertBuilding(
+    db: PoolConnection,
+    id: string,
+    input: Omit<BuildingInput, 'revision'>,
+  ): Promise<void> {
+    const building = await insert(db, 'INSERT INTO buildings(society_id,code,name) VALUES(?,?,?)', [
+      id,
+      input.code,
+      input.name,
+    ]);
+    await this.insertFlats(db, id, building, input.flats);
+  }
+  private async insertFlats(
+    db: PoolConnection,
+    id: string,
+    building: string,
+    flats: BuildingInput['flats'],
+  ): Promise<void> {
+    for (const flat of flats)
+      await db.execute(
+        'INSERT INTO flats(society_id,building_id,flat_number,area_sq_ft) VALUES(?,?,?,?)',
+        [id, building, flat.number, flat.areaSqFt],
+      );
   }
   async structure(session: Session, id: string, scope: Scope, page: number) {
     return this.repository.database.transaction(async (db) => {

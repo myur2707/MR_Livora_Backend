@@ -7,6 +7,8 @@ import {
   identifier,
   parse,
   buildingSchema,
+  buildingBatchSchema,
+  rowHousesSchema,
   residentSchema,
   maintenanceSchema,
   createSocietySchema,
@@ -129,4 +131,55 @@ void test('bounded invitation queue reports overflow and delivery failures witho
   );
   await queue.idle();
   assert.deepEqual(logs, ['RESET_QUEUE_FULL', 'RESET_DELIVERY_FAILED']);
+});
+
+void test('row houses validate bounded unique numbers and reject scope/group overrides', () => {
+  const house = { number: '1', areaSqFt: null };
+  const body = { revision: '1', houses: [house] };
+  assert.deepEqual(parse(rowHousesSchema, body), body);
+  const houses = Array.from({ length: 200 }, (_, n) => ({ ...house, number: String(n + 1) }));
+  assert.equal(parse(rowHousesSchema, { ...body, houses }).houses.length, 200);
+  assert.throws(() =>
+    parse(buildingSchema, {
+      revision: '1',
+      code: 'A',
+      name: 'Wing A',
+      flats: houses.slice(0, 101),
+    }),
+  );
+  for (const invalid of [
+    { ...body, societyId: '2' },
+    { ...body, code: 'A' },
+    { ...body, houses: [] },
+    { ...body, houses: [house, house] },
+    { ...body, houses: [{ ...house, areaSqFt: '-1.00' }] },
+    { ...body, houses: Array.from({ length: 201 }, (_, n) => ({ ...house, number: String(n) })) },
+  ])
+    assert.throws(() => parse(rowHousesSchema, invalid));
+  assert.throws(() =>
+    parse(buildingSchema, { revision: '1', code: 'row_houses', name: 'Wing', flats: [house] }),
+  );
+});
+
+void test('wing batches bound work, reject duplicate codes and protected fields, and keep flat uniqueness within a wing', () => {
+  const wing = { code: 'A', name: 'Wing A', flats: [{ number: '101', areaSqFt: null }] };
+  const batch = { revision: '1', buildings: [wing, { ...wing, code: 'B' }] };
+  assert.equal(parse(buildingBatchSchema, batch).buildings.length, 2);
+  for (const invalid of [
+    { ...batch, societyId: '2' },
+    { ...batch, buildings: [] },
+    { ...batch, buildings: [wing, { ...wing, code: 'a' }] },
+    { ...batch, buildings: [{ ...wing, recordedBy: '1' }] },
+    { ...batch, buildings: [{ ...wing, flats: [wing.flats[0], wing.flats[0]] }] },
+    { ...batch, buildings: Array.from({ length: 11 }, (_, i) => ({ ...wing, code: String(i) })) },
+    {
+      ...batch,
+      buildings: Array.from({ length: 6 }, (_, i) => ({
+        ...wing,
+        code: String(i),
+        flats: Array.from({ length: 100 }, (_, n) => ({ number: String(n), areaSqFt: null })),
+      })),
+    },
+  ])
+    assert.throws(() => parse(buildingBatchSchema, invalid));
 });

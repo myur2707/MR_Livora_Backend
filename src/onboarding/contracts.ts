@@ -62,27 +62,41 @@ export const transitionSchema = z.strictObject({
   fromStatus: z.enum(statuses),
   status: z.enum(statuses),
 });
-export const buildingSchema = z
+const propertyUnitSchema = z.strictObject({
+  number: text(32),
+  areaSqFt: z
+    .string()
+    .regex(/^[1-9]\d{0,7}\.\d{2}$/)
+    .nullable(),
+});
+const wingSchema = z
   .strictObject({
-    ...revision,
     code: text(64),
     name: text(100),
-    flats: z
-      .array(
-        z.strictObject({
-          number: text(32),
-          areaSqFt: z
-            .string()
-            .regex(/^[1-9]\d{0,7}\.\d{2}$/)
-            .nullable(),
-        }),
-      )
-      .min(1)
-      .max(100),
+    flats: z.array(propertyUnitSchema).min(1).max(100),
   })
   .refine(
     (v) => new Set(v.flats.map((f) => f.number.toLocaleLowerCase('en-US'))).size === v.flats.length,
+  )
+  .refine((v) => v.code.toUpperCase() !== 'ROW_HOUSES');
+export const rowHousesSchema = z
+  .strictObject({ ...revision, houses: z.array(propertyUnitSchema).min(1).max(200) })
+  .refine(
+    (v) =>
+      new Set(v.houses.map((h) => h.number.toLocaleLowerCase('en-US'))).size === v.houses.length,
   );
+export const buildingSchema = wingSchema.safeExtend(revision);
+export const buildingBatchSchema = z
+  .strictObject({
+    ...revision,
+    buildings: z.array(wingSchema).min(1).max(10),
+  })
+  .refine(
+    (v) =>
+      new Set(v.buildings.map((b) => b.code.toLocaleLowerCase('en-US'))).size ===
+      v.buildings.length,
+  )
+  .refine((v) => v.buildings.reduce((total, b) => total + b.flats.length, 0) <= 500);
 export const residentSchema = z
   .strictObject({
     ...revision,
@@ -123,6 +137,9 @@ export function parse<T>(schema: z.ZodType<T>, value: unknown): T {
 }
 export type CreateSociety = z.infer<typeof createSocietySchema>;
 export type BuildingInput = z.infer<typeof buildingSchema>;
+export type RowHousesInput = z.infer<typeof rowHousesSchema>;
 export type ResidentInput = z.infer<typeof residentSchema>;
 export type MaintenanceInput = z.infer<typeof maintenanceSchema>;
 export type PageInput = z.infer<typeof pageSchema>;
+
+export type BuildingBatchInput = z.infer<typeof buildingBatchSchema>;

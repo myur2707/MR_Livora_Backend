@@ -12,6 +12,8 @@ import {
   inviteSchema,
   transitionSchema,
   buildingSchema,
+  buildingBatchSchema,
+  rowHousesSchema,
   residentSchema,
   maintenanceSchema,
   confirmationSchema,
@@ -61,6 +63,26 @@ export function onboardingRouter(
         ),
       ),
     );
+    router.post(prefix + '/buildings/batch', security.csrf, ...guards, async (r, s) => {
+      await onboarding.buildingBatch(
+        session(r),
+        id(r),
+        scope,
+        parse(buildingBatchSchema, r.body),
+        audit(r, s),
+      );
+      s.status(201).end();
+    });
+    router.post(prefix + '/row-houses', security.csrf, ...guards, async (r, s) => {
+      await onboarding.rowHouses(
+        session(r),
+        id(r),
+        scope,
+        parse(rowHousesSchema, r.body),
+        audit(r, s),
+      );
+      s.status(201).end();
+    });
     router.post(prefix + '/buildings', security.csrf, ...guards, async (r, s) => {
       await onboarding.building(
         session(r),
