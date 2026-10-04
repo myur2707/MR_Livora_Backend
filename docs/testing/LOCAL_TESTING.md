@@ -30,7 +30,35 @@ From the parent workspace use the path MR_Livora_Backend/scripts/local.ps1. Serv
 
 Use exactly **127.0.0.1:4200**, matching APP_ORIGIN. localhost is a different origin and state-changing requests will fail CSRF checks. The API root has no dashboard; use the Angular address.
 
+## MySQL connection alongside XAMPP
+
+The inspected XAMPP installation runs MariaDB 10.4.24 on port 3306. MR Livora requires MySQL 8.4; keep the managed MySQL instance on port 3307 alongside XAMPP. XAMPP can remain running. Starting XAMPP does not start MR Livora's separate MySQL instance; use `npm run local:start` for the application services.
+
+For a new MySQL client connection, use:
+
+| Setting                                  | Value                                                                                     |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Host                                     | `127.0.0.1`                                                                               |
+| Port                                     | `3307`                                                                                    |
+| Database / default schema                | `livora_dev_manual`                                                                       |
+| Database inspection / migration username | `livora_manual_migrator`                                                                  |
+| Password                                 | Read `DB_PASSWORD` from the backend's ignored `.env`; do not use the XAMPP root password. |
+
+The backend is already configured with `DB_HOST=127.0.0.1`, `DB_PORT=3307` and `DB_NAME=livora_dev_manual`. `DB_USER`/`DB_PASSWORD` belong to the migration account; the API uses the separately restricted `APP_DB_USER=livora_manual_app` and `APP_DB_PASSWORD`. Do not switch the API to root or grant runtime access to migration history simply to browse it. Database passwords differ from application login passwords.
+
+Run `npm run db:migrate` and `npm run db:status` from the backend repository to safely apply pending additive migrations and verify checksums. Verification on 4 October 2026: MySQL 8.4.8, all 14 migrations applied, zero pending; the migration command applied zero new migrations. Runtime access and the frontend API proxy were verified successfully. Existing schemas and accounts were preserved.
+
+Open `http://127.0.0.1:4200` to use the app. Application credentials are in `.local-db/manual/TEST_ACCOUNTS.md`; no database credentials or application passwords belong in Git.
+
 ## Accounts
+
+### Current fresh QA reset (4 October 2026)
+
+The authorized reset rebuilt only `livora_dev_manual` on MySQL port 3307, after creating a verified full SQL backup under `.local-db/manual/backups/qa-reset-2026-10-04-47370cce`. All 14 migrations were reapplied; 59 tables and 75 migration-defined triggers were verified. Previous societies, memberships, residents, occupancies, invitations, bills, payments, receipts and audit history were removed. XAMPP/MariaDB and other schemas were untouched.
+
+Only a fresh `platform@example.invalid` Platform Admin account was recreated, with no society membership. Its new random password is in the ignored `.local-db/manual/TEST_ACCOUNTS.md`; previous credentials are obsolete. Login/logout and the empty platform dashboard were checked, and tenant financial access remains denied. New sessions and security events are created by normal app use.
+
+The account list below describes the original development demonstration fixture; those sample accounts and societies are **not present** in the fresh QA database. Create QA societies through the Platform Admin onboarding screens. Do not rerun demonstration seeds unless sample data is deliberately wanted.
 
 Open the ignored local file **.local-db/manual/TEST_ACCOUNTS.md** for the randomly generated initial password. No passwords are committed or printed by setup.
 
