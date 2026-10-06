@@ -47,6 +47,7 @@ const profileSchema = z.strictObject({
   displayName: profileText,
   contactPhone: z.union([phone, z.literal('').transform(() => null), z.null()]),
 });
+const changePasswordSchema = z.strictObject({ password });
 const emptySchema = z.strictObject({});
 function parse<T>(schema: z.ZodType<T>, input: unknown): T {
   const result = schema.safeParse(input);
@@ -139,6 +140,20 @@ export function createApp(
           auth.audit(request.ip ?? 'unknown', String(response.locals['requestId'])),
         ),
       );
+    },
+  );
+  router.patch(
+    '/auth/password',
+    security.csrf,
+    security.authenticated,
+    async (request, response) => {
+      const body = parse(changePasswordSchema, request.body);
+      await auth.changePassword(
+        security.context(request).session,
+        body.password,
+        auth.audit(request.ip ?? 'unknown', String(response.locals['requestId'])),
+      );
+      response.sendStatus(204);
     },
   );
   router.post('/auth/logout', security.csrf, async (request, response) => {

@@ -158,6 +158,31 @@ export class AuthService {
     if (!profile) throw new ApiError(401, 'AUTH_REQUIRED', 'Sign in to continue.');
     return profile;
   }
+  async changePassword(session: Session, password: string, audit: RequestAudit): Promise<void> {
+    if (!session.userId) throw new ApiError(401, 'AUTH_REQUIRED', 'Sign in to continue.');
+    const encoded = await hashPassword(password);
+    await this.repository.database.transaction(async (db) => {
+      const [users] = await db.execute<UserRow[]>(
+        "SELECT id, email_normalized, password_hash, status FROM users WHERE id = ? AND status = 'ACTIVE' FOR UPDATE",
+        [session.userId],
+      );
+      if (!users[0]) throw new ApiError(401, 'AUTH_REQUIRED', 'Sign in to continue.');
+      const now = this.clock();
+      await db.execute('UPDATE users SET password_hash = ? WHERE id = ?', [
+        encoded,
+        session.userId,
+      ]);
+      await db.execute(
+        'UPDATE password_reset_tokens SET consumed_at = ? WHERE user_id = ? AND consumed_at IS NULL',
+        [sqlTime(now), session.userId],
+      );
+      await db.execute(
+        'UPDATE auth_sessions SET revoked_at = ? WHERE user_id = ? AND token_hash <> ? AND revoked_at IS NULL',
+        [sqlTime(now), session.userId, session.hash],
+      );
+      await this.repository.audit(db, 'password.reset.completed', session.userId, audit, now);
+    });
+  }
   requestReset(email: string, audit: RequestAudit): void {
     this.queue.enqueue(async () => {
       const token = newToken();
