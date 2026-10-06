@@ -32,7 +32,7 @@ Use exactly **127.0.0.1:4200**, matching APP_ORIGIN. localhost is a different or
 
 ## MySQL connection alongside XAMPP
 
-The inspected XAMPP installation runs MariaDB 10.4.24 on port 3306. MR Livora requires MySQL 8.4; keep the managed MySQL instance on port 3307 alongside XAMPP. XAMPP can remain running. Starting XAMPP does not start MR Livora's separate MySQL instance; use `npm run local:start` for the application services.
+The inspected XAMPP installation runs MariaDB 10.4.24 on port 3306. Mr. Livora requires MySQL 8.4; keep the managed MySQL instance on port 3307 alongside XAMPP. XAMPP can remain running. Starting XAMPP does not start Mr. Livora's separate MySQL instance; use `npm run local:start` for the application services.
 
 For a new MySQL client connection, use:
 
@@ -116,7 +116,7 @@ The managed frontend serves a production build. Restart the setup after code cha
 
 ## Current manual verification
 
-The [Step 2/3 checklist report](STEP_2_3_MANUAL_VERIFICATION.md) records **115 passing automated tests**, real browser/API and local TLS SMTP reset checks, an actual Chrome PWA installation/standalone launch, the table keyboard/mobile fix, and the remaining deployed-HTTPS cookie check. The installed app uses an isolated Chrome profile; the ignored frontend `.local-tools/Open-MR Livora-PWA.ps1` reopens it while services are running. Initial manual-account passwords were preserved.
+The [Step 2/3 checklist report](STEP_2_3_MANUAL_VERIFICATION.md) records **115 passing automated tests**, real browser/API and local TLS SMTP reset checks, an actual Chrome PWA installation/standalone launch, the table keyboard/mobile fix, and the remaining deployed-HTTPS cookie check. The installed app uses an isolated Chrome profile; the ignored frontend `.local-tools/Open-Mr. Livora-PWA.ps1` reopens it while services are running. Initial manual-account passwords were preserved.
 
 ## Initial local setup verification on 2026-10-02
 

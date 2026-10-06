@@ -196,6 +196,42 @@ export async function residentAccessIntegration(suite: TestContext, db: Connecti
     await declined.login(rejected.email, password);
     await root.login(platform.email, password);
     await suite.test(
+      'authenticated join choices expose bounded active addresses without tenant-private data',
+      async () => {
+        assert.equal(
+          (await anonymous.request('/resident-access/join-options/societies?search=STEP6')).status,
+          401,
+        );
+        const societies = await joiner.request('/resident-access/join-options/societies');
+        assert.equal(societies.status, 200, societies.raw);
+        const societyItems: unknown = societies.data['items'];
+        assert.ok(Array.isArray(societyItems));
+        assert.ok(
+          (societyItems as unknown[]).some((item) => {
+            if (typeof item !== 'object' || item === null) return false;
+            const option = item as Record<string, unknown>;
+            return option['code'] === 'STEP6_A' && option['name'] === 'STEP6_A';
+          }),
+        );
+        const properties = await joiner.request(
+          '/resident-access/join-options/properties?societyCode=STEP6_A',
+        );
+        assert.equal(properties.status, 200, properties.raw);
+        const propertyItems = properties.data['items'];
+        assert.ok(Array.isArray(propertyItems));
+        assert.deepEqual(propertyItems, [
+          {
+            buildingCode: 'A',
+            buildingName: 'Block A',
+            flatNumber: '101',
+            propertyType: 'FLAT',
+          },
+        ]);
+        assert.equal(JSON.stringify(properties.data).includes('person'), false);
+        assert.equal(JSON.stringify(properties.data).includes('occupancy'), false);
+      },
+    );
+    await suite.test(
       'committee invitation binds existing tenant person, email and occupancy without account enumeration',
       async () => {
         const r = await committee.request('/society/resident-invitations', {

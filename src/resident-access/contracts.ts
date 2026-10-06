@@ -36,6 +36,13 @@ export const joinSchema = z.strictObject({
   contactPhone: personInput.shape.contactPhone,
   note: text(500).nullable(),
 });
+export const joinSocietyOptionsSchema = z.strictObject({
+  search: z.string().trim().max(80).default(''),
+});
+export const joinPropertyOptionsSchema = z.strictObject({
+  societyCode: text(64),
+  search: z.string().trim().max(80).default(''),
+});
 export const pageSchema = z.strictObject({
   page: z.coerce.number().int().min(1).max(10000).default(1),
   search: z.string().trim().max(80).default(''),
@@ -57,5 +64,6 @@ export const approvalSchema = z
   })
   .refine((v) => !v.endsOn || v.endsOn >= v.startsOn);
 export type JoinInput = z.infer<typeof joinSchema>;
+export type JoinPropertyOptionsInput = z.infer<typeof joinPropertyOptionsSchema>;
 export type ApprovalInput = z.infer<typeof approvalSchema>;
 export type PageInput = z.infer<typeof pageSchema>;

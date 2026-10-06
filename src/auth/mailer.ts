@@ -25,7 +25,7 @@ export function smtpMailer(config: ReturnType<typeof loadConfig>): ResetMailer &
       await transport.sendMail({
         from: config.SMTP_FROM,
         to: email,
-        subject: 'Verify your MR Livora email',
+        subject: 'Verify your Mr. Livora email',
         text:
           'Verify your email within 30 minutes:\n\n' +
           link +
@@ -38,7 +38,7 @@ export function smtpMailer(config: ReturnType<typeof loadConfig>): ResetMailer &
       await transport.sendMail({
         from: config.SMTP_FROM,
         to: email,
-        subject: 'Your MR Livora registration instructions',
+        subject: 'Your Mr. Livora registration instructions',
         text:
           'Sign in with your existing account to request another society membership:\n\n' +
           link +
@@ -51,7 +51,7 @@ export function smtpMailer(config: ReturnType<typeof loadConfig>): ResetMailer &
       await transport.sendMail({
         from: config.SMTP_FROM,
         to: email,
-        subject: 'Your MR Livora resident invitation',
+        subject: 'Your Mr. Livora resident invitation',
         text:
           'The committee of ' +
           society +
@@ -66,7 +66,7 @@ export function smtpMailer(config: ReturnType<typeof loadConfig>): ResetMailer &
       await transport.sendMail({
         from: config.SMTP_FROM,
         to: email,
-        subject: 'Your MR Livora committee invitation',
+        subject: 'Your Mr. Livora committee invitation',
         text:
           'You are invited to help set up ' +
           societyName +
@@ -81,7 +81,7 @@ export function smtpMailer(config: ReturnType<typeof loadConfig>): ResetMailer &
       await transport.sendMail({
         from: config.SMTP_FROM,
         to: email,
-        subject: 'Reset your MR Livora password',
+        subject: 'Reset your Mr. Livora password',
         text:
           'Use this single-use link within 30 minutes to reset your password:\n\n' +
           link +

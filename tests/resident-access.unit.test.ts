@@ -6,6 +6,8 @@ import {
   inviteSchema,
   acceptanceSchema,
   approvalSchema,
+  joinSocietyOptionsSchema,
+  joinPropertyOptionsSchema,
 } from '../src/resident-access/contracts.js';
 void test('resident boundary rejects protected identifiers, roles and identity changes', () => {
   const join = {
@@ -29,6 +31,20 @@ void test('resident boundary rejects protected identifiers, roles and identity c
     }).success,
     false,
   );
+});
+void test('join option searches are bounded, scoped and reject extra fields', () => {
+  assert.deepEqual(joinSocietyOptionsSchema.parse({ search: '  township  ' }), {
+    search: 'township',
+  });
+  assert.deepEqual(joinPropertyOptionsSchema.parse({ societyCode: 'ACTIVE_ONE' }), {
+    societyCode: 'ACTIVE_ONE',
+    search: '',
+  });
+  assert.equal(
+    joinPropertyOptionsSchema.safeParse({ societyCode: 'ACTIVE_ONE', societyId: '1' }).success,
+    false,
+  );
+  assert.equal(joinSocietyOptionsSchema.safeParse({ search: 'x'.repeat(81) }).success, false);
 });
 void test('approval requires explicit verification and valid dates, not an applicant claim', () => {
   const value = {

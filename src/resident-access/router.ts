@@ -12,6 +12,8 @@ import {
   acceptanceSchema,
   inviteSchema,
   joinSchema,
+  joinSocietyOptionsSchema,
+  joinPropertyOptionsSchema,
   pageSchema,
   decisionSchema,
   approvalSchema,
@@ -62,6 +64,17 @@ export function residentAccessRouter(security: Security, module: ResidentAccessM
   router.get('/resident-access/requests', security.authenticated, async (r, s) =>
     s.json(await module.requests.own(session(r), parse(pageSchema, r.query))),
   );
+  router.get('/resident-access/join-options/societies', security.authenticated, async (r, s) => {
+    await rate('resident-join-options', security.identity(r).userId, 60);
+    const query = parse(joinSocietyOptionsSchema, r.query);
+    s.json(await module.requests.societyOptions(session(r), query.search));
+  });
+  router.get('/resident-access/join-options/properties', security.authenticated, async (r, s) => {
+    await rate('resident-join-options', security.identity(r).userId, 60);
+    s.json(
+      await module.requests.propertyOptions(session(r), parse(joinPropertyOptionsSchema, r.query)),
+    );
+  });
   router.post('/resident-access/requests', security.csrf, security.authenticated, async (r, s) => {
     await rate('resident-join-user', security.identity(r).userId, 5);
     s.status(201).json(

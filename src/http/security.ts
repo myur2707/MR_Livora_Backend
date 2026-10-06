@@ -19,6 +19,8 @@ const queryPaths = [
 ];
 const queryRoutes = [
   '/resident-access/requests',
+  '/resident-access/join-options/societies',
+  '/resident-access/join-options/properties',
   '/society/resident-invitations',
   '/society/registration-requests',
   '/platform/societies',

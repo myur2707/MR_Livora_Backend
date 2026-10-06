@@ -7,7 +7,7 @@ import type { OccupancyService } from '../property/occupancies.js';
 import type { TenantScope } from '../property/access.js';
 import { conflict, unavailable } from './identity.js';
 import type { ResidentIdentity, ResidentUser } from './identity.js';
-import type { JoinInput, ApprovalInput, PageInput } from './contracts.js';
+import type { JoinInput, JoinPropertyOptionsInput, ApprovalInput, PageInput } from './contracts.js';
 interface RequestRow extends RowDataPacket {
   id: string;
   society_id: string;
@@ -33,11 +33,73 @@ const requestJoins =
 const select =
   'SELECT r.id,r.society_id,r.user_id,r.requested_flat_id,r.requested_occupancy_type,r.status,r.reviewed_at AS reviewedAt,r.decision_note AS decisionNote,d.display_name,d.contact_phone,d.applicant_note,d.resolved_person_id AS resolvedPersonId,d.approved_membership_id AS membershipId,d.approved_occupancy_id AS occupancyId,u.email_normalized AS email,s.name AS societyName,b.code AS buildingCode,f.flat_number AS flatNumber' +
   requestJoins;
+const joinPropertyOptionLimit = 500;
 export class ResidentRequests {
   constructor(
     readonly identity: ResidentIdentity,
     readonly occupancy: OccupancyService,
   ) {}
+  async societyOptions(session: Session, search: string) {
+    return this.identity.property.access.database.transaction(async (db) => {
+      await this.identity.actor(db, session);
+      const values: string[] = [];
+      const filter = search ? " AND (s.name LIKE ? ESCAPE '=' OR s.code LIKE ? ESCAPE '=')" : '';
+      if (search) {
+        const pattern =
+          '%' + search.replaceAll('=', '==').replaceAll('%', '=%').replaceAll('_', '=_') + '%';
+        values.push(pattern, pattern);
+      }
+      return {
+        items: await rows<RowDataPacket & { code: string; name: string }>(
+          db,
+          "SELECT s.code,s.name FROM societies s WHERE s.status='ACTIVE' AND s.archived_at IS NULL" +
+            filter +
+            ' ORDER BY s.name,s.id LIMIT 50',
+          values,
+        ),
+      };
+    });
+  }
+  async propertyOptions(session: Session, input: JoinPropertyOptionsInput) {
+    return this.identity.property.access.database.transaction(async (db) => {
+      await this.identity.actor(db, session);
+      const society = (
+        await rows<RowDataPacket & { id: string }>(
+          db,
+          "SELECT id FROM societies WHERE code=? AND status='ACTIVE' AND archived_at IS NULL",
+          [input.societyCode],
+        )
+      )[0];
+      if (!society) throw unavailable();
+      const values: string[] = [society.id];
+      const filter = input.search
+        ? " AND (f.flat_number LIKE ? ESCAPE '=' OR b.code LIKE ? ESCAPE '=' OR b.name LIKE ? ESCAPE '=')"
+        : '';
+      if (input.search) {
+        const pattern =
+          '%' +
+          input.search.replaceAll('=', '==').replaceAll('%', '=%').replaceAll('_', '=_') +
+          '%';
+        values.push(pattern, pattern, pattern);
+      }
+      return {
+        items: await rows<
+          RowDataPacket & {
+            buildingCode: string;
+            buildingName: string;
+            flatNumber: string;
+            propertyType: 'FLAT' | 'ROW_HOUSE';
+          }
+        >(
+          db,
+          "SELECT b.code AS buildingCode,b.name AS buildingName,f.flat_number AS flatNumber,IF(b.code='ROW_HOUSES','ROW_HOUSE','FLAT') AS propertyType FROM flats f JOIN buildings b ON b.society_id=f.society_id AND b.id=f.building_id WHERE f.society_id=? AND f.archived_at IS NULL AND b.archived_at IS NULL" +
+            filter +
+            ' ORDER BY b.name,f.flat_number,f.id LIMIT ?',
+          [...values, joinPropertyOptionLimit],
+        ),
+      };
+    });
+  }
   async join(session: Session, input: JoinInput, audit: RequestAudit) {
     return this.identity.property.access.database.transaction(async (db) => {
       const user = await this.identity.actor(db, session);

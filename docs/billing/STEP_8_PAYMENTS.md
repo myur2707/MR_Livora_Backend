@@ -1,6 +1,6 @@
 # Step 8 payment recording
 
-MR Livora records money physically collected or returned by committee/accountants. It initiates no transfers and integrates no payment gateway. Methods are CASH, UPI, BANK_TRANSFER and CHEQUE. A cheque is recorded only after the committee confirms receipt/clearance; pending cheque processing is outside this step.
+Mr. Livora records money physically collected or returned by committee/accountants. It initiates no transfers and integrates no payment gateway. Methods are CASH, UPI, BANK_TRANSFER and CHEQUE. A cheque is recorded only after the committee confirms receipt/clearance; pending cheque processing is outside this step.
 
 ## Policies and exact amounts
 

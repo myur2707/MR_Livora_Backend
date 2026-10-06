@@ -1,4 +1,4 @@
-# MR Livora backend
+# Mr. Livora backend
 
 Step 10 adds [committee notices and complaint workflows](docs/community/STEP_10_COMMUNITY.md), with [executed verification results](docs/testing/STEP_10_VERIFICATION.md). Apply additive migration 014 and provision explicit community permissions/runtime grants; the managed local runner handles this safely.
 
