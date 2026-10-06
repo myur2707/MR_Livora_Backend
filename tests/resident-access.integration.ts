@@ -672,6 +672,12 @@ export async function residentAccessIntegration(suite: TestContext, db: Connecti
         assert.equal(list.data['pageSize'], 20);
         assert.ok(Array.isArray(list.data['items']));
         assert.equal(list.data['items'].length, 2);
+        const noMatches = await declined.request(
+          '/resident-access/requests?status=all&search=definitely-not-a-society&page=1',
+        );
+        assert.equal(noMatches.status, 200, noMatches.raw);
+        assert.equal(noMatches.data['total'], 0);
+        assert.deepEqual(noMatches.data['items'], []);
         assert.equal(
           (await committee.request('/society/registration-requests?societyId=' + b.society)).status,
           400,

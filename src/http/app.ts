@@ -32,6 +32,21 @@ const loginSchema = z.strictObject({ email, password: z.string().min(1).max(128)
 const forgotSchema = z.strictObject({ email });
 const resetSchema = z.strictObject({ token, password });
 const selectionSchema = z.strictObject({ societyId: id.nullable() });
+const profileText = z
+  .string()
+  .trim()
+  .min(1)
+  .max(160)
+  .refine((value) => !/[\p{Cc}\p{Cf}\uFFFD]/u.test(value));
+const phone = z
+  .string()
+  .trim()
+  .max(32)
+  .regex(/^\+?[0-9][0-9 ()-]{5,30}$/);
+const profileSchema = z.strictObject({
+  displayName: profileText,
+  contactPhone: z.union([phone, z.literal('').transform(() => null), z.null()]),
+});
 const emptySchema = z.strictObject({});
 function parse<T>(schema: z.ZodType<T>, input: unknown): T {
   const result = schema.safeParse(input);
@@ -108,6 +123,24 @@ export function createApp(
       expiresAt: security.context(request).session.absoluteExpiresAt.replace(' ', 'T') + 'Z',
     });
   });
+  router.get('/auth/profile', security.authenticated, async (request, response) => {
+    response.json(await auth.profile(security.context(request).session));
+  });
+  router.patch(
+    '/auth/profile',
+    security.csrf,
+    security.authenticated,
+    async (request, response) => {
+      const body = parse(profileSchema, request.body);
+      response.json(
+        await auth.updateProfile(
+          security.context(request).session,
+          body,
+          auth.audit(request.ip ?? 'unknown', String(response.locals['requestId'])),
+        ),
+      );
+    },
+  );
   router.post('/auth/logout', security.csrf, async (request, response) => {
     parse(emptySchema, request.body);
     await auth.logout(

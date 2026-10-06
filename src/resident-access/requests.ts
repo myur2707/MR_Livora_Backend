@@ -28,8 +28,11 @@ interface RequestRow extends RowDataPacket {
   membershipId: string | null;
   occupancyId: string | null;
 }
+const requestJoins =
+  ' FROM registration_requests r JOIN registration_request_details d ON d.society_id=r.society_id AND d.request_id=r.id JOIN users u ON u.id=r.user_id JOIN societies s ON s.id=r.society_id JOIN flats f ON f.society_id=r.society_id AND f.id=r.requested_flat_id JOIN buildings b ON b.society_id=f.society_id AND b.id=f.building_id';
 const select =
-  'SELECT r.id,r.society_id,r.user_id,r.requested_flat_id,r.requested_occupancy_type,r.status,r.reviewed_at AS reviewedAt,r.decision_note AS decisionNote,d.display_name,d.contact_phone,d.applicant_note,d.resolved_person_id AS resolvedPersonId,d.approved_membership_id AS membershipId,d.approved_occupancy_id AS occupancyId,u.email_normalized AS email,s.name AS societyName,b.code AS buildingCode,f.flat_number AS flatNumber FROM registration_requests r JOIN registration_request_details d ON d.society_id=r.society_id AND d.request_id=r.id JOIN users u ON u.id=r.user_id JOIN societies s ON s.id=r.society_id JOIN flats f ON f.society_id=r.society_id AND f.id=r.requested_flat_id JOIN buildings b ON b.society_id=f.society_id AND b.id=f.building_id';
+  'SELECT r.id,r.society_id,r.user_id,r.requested_flat_id,r.requested_occupancy_type,r.status,r.reviewed_at AS reviewedAt,r.decision_note AS decisionNote,d.display_name,d.contact_phone,d.applicant_note,d.resolved_person_id AS resolvedPersonId,d.approved_membership_id AS membershipId,d.approved_occupancy_id AS occupancyId,u.email_normalized AS email,s.name AS societyName,b.code AS buildingCode,f.flat_number AS flatNumber' +
+  requestJoins;
 export class ResidentRequests {
   constructor(
     readonly identity: ResidentIdentity,
@@ -92,12 +95,16 @@ export class ResidentRequests {
       where += ' AND r.status=?';
       values.push(page.status);
     }
+    if (page.search) {
+      const search = `%${page.search.replace(/[\\%_]/g, '\\$&')}%`;
+      where += ' AND (s.name LIKE ? OR b.code LIKE ? OR f.flat_number LIKE ?)';
+      values.push(search, search, search);
+    }
     const total =
       (
         await rows<RowDataPacket & { total: number }>(
           db,
-          'SELECT COUNT(*) AS total FROM registration_requests r JOIN registration_request_details d ON d.society_id=r.society_id AND d.request_id=r.id WHERE ' +
-            where,
+          'SELECT COUNT(*) AS total' + requestJoins + ' WHERE ' + where,
           values,
         )
       )[0]?.total ?? 0;

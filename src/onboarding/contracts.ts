@@ -133,6 +133,7 @@ export const pageSchema = z.strictObject({
   page: z.coerce.number().int().min(1).max(10000).default(1),
   pageSize: z.coerce.number().int().min(1).max(50).default(20),
   status: z.enum(statuses).optional(),
+  search: text(80).optional(),
 });
 export function parse<T>(schema: z.ZodType<T>, value: unknown): T {
   const result = schema.safeParse(value);

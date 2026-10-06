@@ -94,6 +94,9 @@ void test('setup schemas reject impersonation, malformed dates/money, duplicate 
   assert.throws(() => parse(createSocietySchema, { ...society, timezone: 'unknown' }));
   assert.throws(() => parse(pageSchema, { pageSize: 100000 }));
   assert.throws(() => parse(pageSchema, { sort: 'password_hash' }));
+  assert.equal(parse(pageSchema, { search: '  Test society  ' }).search, 'Test society');
+  assert.throws(() => parse(pageSchema, { search: 'Test\u0000society' }));
+  assert.throws(() => parse(pageSchema, { search: 'x'.repeat(81) }));
   assert.throws(() =>
     parse(buildingSchema, {
       revision: '1',

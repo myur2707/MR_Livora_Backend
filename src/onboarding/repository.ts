@@ -210,8 +210,18 @@ export class OnboardingRepository {
   async list(session: Session, page: PageInput) {
     return this.database.transaction(async (db) => {
       await this.platform(db, session);
-      const where = page.status ? 's.archived_at IS NULL AND s.status=?' : 's.archived_at IS NULL';
-      const values: Values = page.status ? [page.status] : [];
+      const filters = ['s.archived_at IS NULL'];
+      const values: Values = [];
+      if (page.status) {
+        filters.push('s.status=?');
+        values.push(page.status);
+      }
+      if (page.search) {
+        filters.push("(s.name LIKE ? ESCAPE '=' OR s.code LIKE ? ESCAPE '=')");
+        const search = '%' + page.search.replace(/[=%_]/g, '=$&') + '%';
+        values.push(search, search);
+      }
+      const where = filters.join(' AND ');
       const total = await rows(
         db,
         'SELECT COUNT(*) AS total FROM societies s WHERE ' + where,

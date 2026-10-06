@@ -10,7 +10,7 @@ const sql = 'CREATE TABLE example (id INT PRIMARY KEY) ENGINE=InnoDB;\n';
 
 void test('baseline contains ordered, additive, independently executable migrations', async () => {
   const migrations = await loadMigrations();
-  assert.equal(migrations.length, 14);
+  assert.equal(migrations.length, 15);
   assert.equal(migrations.slice(0, 5).flatMap((migration) => migration.statements).length, 44);
   assert.equal(migrations[5]?.statements.length, 7);
   assert.equal(migrations[6]?.statements.length, 1);
@@ -21,7 +21,8 @@ void test('baseline contains ordered, additive, independently executable migrati
   assert.equal(migrations[11]?.statements.length, 27);
   assert.equal(migrations[12]?.statements.length, 21);
   assert.equal(migrations[13]?.statements.length, 6);
-  assert.equal(new Set(migrations.map((migration) => migration.checksum)).size, 14);
+  assert.equal(migrations[14]?.statements.length, 4);
+  assert.equal(new Set(migrations.map((migration) => migration.checksum)).size, 15);
 });
 
 void test('checksum is stable across Windows and Unix line endings', () => {

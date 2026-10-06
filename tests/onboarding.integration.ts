@@ -196,6 +196,17 @@ export async function onboardingIntegration(suite: TestContext, db: Connection):
         assert.equal(directory.status, 200);
         assert.ok(Array.isArray(directory.data['items']));
         assert.equal(directory.data['items'].length, 1);
+        const searched = await platform.request(
+          '/platform/societies?page=1&pageSize=5&search=STEP4_A',
+        );
+        assert.equal(searched.status, 200);
+        assert.equal(searched.data['total'], 1);
+        assert.equal((searched.data['items'] as Record<string, unknown>[])[0]?.['id'], society);
+        const literalWildcard = await platform.request(
+          '/platform/societies?page=1&pageSize=5&search=%25',
+        );
+        assert.equal(literalWildcard.status, 200);
+        assert.equal(literalWildcard.data['total'], 0);
         const [legacyRows] = await db.execute<RowDataPacket[]>(
           'SELECT id FROM societies WHERE NOT EXISTS(SELECT 1 FROM society_onboarding WHERE society_id=societies.id) LIMIT 1',
         );

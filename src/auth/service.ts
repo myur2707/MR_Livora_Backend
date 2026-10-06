@@ -11,6 +11,7 @@ import {
 import { sqlTime } from './repository.js';
 import type { AuthRepository } from './repository.js';
 import type { UserRow } from './repository.js';
+import type { AccountProfile } from './repository.js';
 import type { ResetMailer } from './mailer.js';
 import type { ResetQueue } from './reset-queue.js';
 import type { RequestAudit, Session } from './types.js';
@@ -134,6 +135,28 @@ export class AuthService {
       );
       await this.repository.audit(db, 'logout', session.userId, audit, this.clock());
     });
+  }
+  async profile(session: Session): Promise<AccountProfile> {
+    if (!session.userId) throw new ApiError(401, 'AUTH_REQUIRED', 'Sign in to continue.');
+    const profile = await this.repository.profile(session.userId);
+    if (!profile) throw new ApiError(401, 'AUTH_REQUIRED', 'Sign in to continue.');
+    return profile;
+  }
+  async updateProfile(
+    session: Session,
+    input: { displayName: string; contactPhone: string | null },
+    audit: RequestAudit,
+  ): Promise<AccountProfile> {
+    if (!session.userId) throw new ApiError(401, 'AUTH_REQUIRED', 'Sign in to continue.');
+    const profile = await this.repository.updateProfile(
+      session.userId,
+      input.displayName,
+      input.contactPhone,
+      audit,
+      this.clock(),
+    );
+    if (!profile) throw new ApiError(401, 'AUTH_REQUIRED', 'Sign in to continue.');
+    return profile;
   }
   requestReset(email: string, audit: RequestAudit): void {
     this.queue.enqueue(async () => {

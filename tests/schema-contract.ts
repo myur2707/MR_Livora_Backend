@@ -25,6 +25,8 @@ const globalTables = [
   'auth_events',
   'resident_account_verifications',
   'resident_account_events',
+  'account_profiles',
+  'account_profile_events',
 ];
 const placeholders = globalTables.map(() => '?').join(', ');
 const tenantPredicate = `t.TABLE_SCHEMA = DATABASE()

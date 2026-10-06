@@ -13,6 +13,7 @@ import { grantBillingRuntime, provisionBillingPermissions } from './billing-gran
 import { grantResidentPortalRuntime } from './resident-portal-grants.js';
 import { grantCommunityRuntime, provisionCommunityPermissions } from './community-grants.js';
 import { provisionReportPermissions } from './report-permissions.js';
+import { grantAccountProfileRuntime } from './account-profile-grants.js';
 async function upgrade(): Promise<void> {
   const dataRoot = resolve('.local-db/manual');
   const settings = z
@@ -63,6 +64,7 @@ async function upgrade(): Promise<void> {
     await grantBillingRuntime(admin, 'livora_dev_manual', 'livora_manual_app', '127.0.0.1');
     await grantResidentPortalRuntime(admin, 'livora_dev_manual', 'livora_manual_app', '127.0.0.1');
     await grantCommunityRuntime(admin, 'livora_dev_manual', 'livora_manual_app', '127.0.0.1');
+    await grantAccountProfileRuntime(admin, 'livora_dev_manual', 'livora_manual_app', '127.0.0.1');
     console.info('Managed local runtime grants updated; existing data and accounts retained.');
   } finally {
     await admin.end();

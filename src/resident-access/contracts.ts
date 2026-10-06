@@ -38,6 +38,7 @@ export const joinSchema = z.strictObject({
 });
 export const pageSchema = z.strictObject({
   page: z.coerce.number().int().min(1).max(10000).default(1),
+  search: z.string().trim().max(80).default(''),
   status: z
     .enum(['PENDING', 'ACCEPTED', 'EXPIRED', 'REVOKED', 'APPROVED', 'REJECTED', 'CANCELLED', 'all'])
     .default('PENDING'),

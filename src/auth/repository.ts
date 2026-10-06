@@ -23,6 +23,16 @@ interface MembershipRow extends RowDataPacket {
   role_code: string;
   permission_code: string | null;
 }
+export interface AccountProfile {
+  email: string;
+  displayName: string;
+  contactPhone: string | null;
+}
+interface AccountProfileRow extends RowDataPacket {
+  email: string;
+  display_name: string | null;
+  contact_phone: string | null;
+}
 export const sqlTime = (now: number): string =>
   new Date(now).toISOString().replace('T', ' ').replace('Z', '');
 export class AuthRepository {
@@ -34,6 +44,48 @@ export class AuthRepository {
         [email],
       )
     )[0];
+  }
+  async profile(userId: string): Promise<AccountProfile | undefined> {
+    const row = (
+      await this.database.rows<AccountProfileRow>(
+        `SELECT u.email_normalized AS email, p.display_name, p.contact_phone
+         FROM users u LEFT JOIN account_profiles p ON p.user_id = u.id
+         WHERE u.id = ? AND u.status = 'ACTIVE'`,
+        [userId],
+      )
+    )[0];
+    if (!row) return undefined;
+    return {
+      email: row.email,
+      displayName: row.display_name ?? '',
+      contactPhone: row.contact_phone,
+    };
+  }
+  async updateProfile(
+    userId: string,
+    displayName: string,
+    contactPhone: string | null,
+    audit: RequestAudit,
+    now: number,
+  ): Promise<AccountProfile | undefined> {
+    await this.database.transaction(async (db) => {
+      const [users] = await db.execute<RowDataPacket[]>(
+        "SELECT id FROM users WHERE id = ? AND status = 'ACTIVE' FOR UPDATE",
+        [userId],
+      );
+      if (!users[0]) return;
+      await db.execute(
+        `INSERT INTO account_profiles (user_id, display_name, contact_phone) VALUES (?, ?, ?)
+         ON DUPLICATE KEY UPDATE display_name = VALUES(display_name), contact_phone = VALUES(contact_phone)`,
+        [userId, displayName, contactPhone],
+      );
+      await db.execute(
+        `INSERT INTO account_profile_events (user_id, action, request_id, ip_hash, created_at)
+         VALUES (?, 'PROFILE_UPDATED', ?, ?, ?)`,
+        [userId, audit.requestId, audit.ipHash, sqlTime(now)],
+      );
+    });
+    return this.profile(userId);
   }
   async audit(
     db: PoolConnection,
