@@ -9,7 +9,31 @@ import {
   equalToken,
 } from '../src/auth/crypto.js';
 import { loadConfig } from '../src/auth/config.js';
+import { transactionalEmail } from '../src/auth/mailer.js';
 import { roleCapabilities } from '../src/auth/types.js';
+
+void test('transactional email includes branded HTML, plain text and escaped dynamic content', () => {
+  const email = transactionalEmail(
+    {
+      preheader: 'Secure account action',
+      eyebrow: 'Resident invitation',
+      title: 'Join <Unsafe> Community',
+      introduction: 'Review the invitation before continuing.',
+      actionLabel: 'Review invitation',
+      link: 'https://app.example/invite?token=a&next=<home>',
+      details: ['Single-use link', 'Expires in 72 hours'],
+      securityNote: 'Ignore this message if you did not expect it.',
+    },
+    2026,
+  );
+  assert.match(email.html, /background:#111111/);
+  assert.match(email.html, /background:#c91f26/);
+  assert.match(email.html, /Join &lt;Unsafe&gt; Community/);
+  assert.match(email.html, /token=a&amp;next=&lt;home&gt;/);
+  assert.doesNotMatch(email.html, /Join <Unsafe>/);
+  assert.match(email.text, /Join <Unsafe> Community/);
+  assert.match(email.text, /© 2026 Mr\. Livora\. All rights reserved\./);
+});
 
 void test('Argon2id hashes use independent salts and the reviewed work factors', async () => {
   const password = 'A synthetic password for tests';
