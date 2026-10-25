@@ -5,8 +5,9 @@ import { rows, insert, notFound, utcTimestamp } from '../onboarding/repository.j
 import { assertUnarchived } from '../property/models.js';
 import type { OccupancyService } from '../property/occupancies.js';
 import type { TenantScope } from '../property/access.js';
-import { conflict, unavailable } from './identity.js';
+import { conflict, homeAlreadyLinked, requestPending, unavailable } from './identity.js';
 import type { ResidentIdentity, ResidentUser } from './identity.js';
+import type { SocietyContacts, SocietyContact } from './contacts.js';
 import type { JoinInput, JoinPropertyOptionsInput, ApprovalInput, PageInput } from './contracts.js';
 interface RequestRow extends RowDataPacket {
   id: string;
@@ -34,10 +35,32 @@ const select =
   'SELECT r.id,r.society_id,r.user_id,r.requested_flat_id,r.requested_occupancy_type,r.status,r.reviewed_at AS reviewedAt,r.decision_note AS decisionNote,d.display_name,d.contact_phone,d.applicant_note,d.resolved_person_id AS resolvedPersonId,d.approved_membership_id AS membershipId,d.approved_occupancy_id AS occupancyId,u.email_normalized AS email,s.name AS societyName,b.code AS buildingCode,f.flat_number AS flatNumber' +
   requestJoins;
 const joinPropertyOptionLimit = 500;
+interface ListOptions {
+  /** Applicant view: include the committee's published contact on pending requests. */
+  applicantContact?: boolean;
+  /** Committee view: flag pending applicants who are already members, with their homes. */
+  memberScope?: TenantScope;
+}
+/** Whether an occupancy is in effect on the society's current date. */
+type HomeState = 'CURRENT' | 'ENDED' | 'UPCOMING';
+interface MemberHome {
+  buildingCode: string;
+  buildingName: string;
+  flatNumber: string;
+  occupancyType: string;
+  startsOn: string;
+  endsOn: string | null;
+  state: HomeState;
+}
+interface ExistingMember {
+  status: string;
+  homes: MemberHome[];
+}
 export class ResidentRequests {
   constructor(
     readonly identity: ResidentIdentity,
     readonly occupancy: OccupancyService,
+    readonly contacts: SocietyContacts,
   ) {}
   async societyOptions(session: Session, search: string) {
     return this.identity.property.access.database.transaction(async (db) => {
@@ -111,16 +134,28 @@ export class ResidentRequests {
         )
       )[0];
       if (!target) throw unavailable();
-      await this.identity.activeSociety(db, target.society_id);
+      const { today } = await this.identity.activeSociety(db, target.society_id);
       if (
         (
-          await rows(db, 'SELECT id FROM society_memberships WHERE society_id=? AND user_id=?', [
-            target.society_id,
-            user.id,
-          ])
+          await rows(
+            db,
+            "SELECT id FROM registration_requests WHERE society_id=? AND user_id=? AND status='PENDING' FOR UPDATE",
+            [target.society_id, user.id],
+          )
         ).length
       )
-        throw conflict();
+        throw requestPending();
+      // Existing members may request an additional home in the same society, e.g. a second flat.
+      const membership = await this.identity.membership(db, target.society_id, user.id);
+      if (membership) {
+        if (membership.status !== 'ACTIVE') throw conflict();
+        const current = await rows(
+          db,
+          'SELECT id FROM flat_occupancies WHERE society_id=? AND flat_id=? AND person_id=? AND starts_on<=? AND (ends_on IS NULL OR ends_on>=?)',
+          [target.society_id, target.flat_id, membership.personId, today, today],
+        );
+        if (current.length) throw homeAlreadyLinked();
+      }
       const id = await insert(
         db,
         'INSERT INTO registration_requests(society_id,user_id,requested_flat_id,requested_occupancy_type) VALUES(?,?,?,?)',
@@ -152,7 +187,9 @@ export class ResidentRequests {
     where: string,
     values: (string | number)[],
     page: PageInput,
+    options: ListOptions = {},
   ) {
+    const withApplicantContact = options.applicantContact === true;
     if (page.status !== 'all') {
       where += ' AND r.status=?';
       values.push(page.status);
@@ -175,6 +212,20 @@ export class ResidentRequests {
       select + ' WHERE ' + where + ' ORDER BY r.id DESC LIMIT 20 OFFSET ?',
       [...values, (page.page - 1) * 20],
     );
+    // Applicants see the committee's published contact only while their own request is pending.
+    const contacts = withApplicantContact
+      ? await this.contacts.forSocieties(db, [
+          ...new Set(data.filter((r) => r.status === 'PENDING').map((r) => String(r.society_id))),
+        ])
+      : new Map<string, SocietyContact>();
+    // Committees see whether a pending applicant already lives in or owns other homes here.
+    const members = options.memberScope
+      ? await this.memberHomes(
+          db,
+          options.memberScope,
+          data.filter((r) => r.status === 'PENDING').map((r) => String(r.user_id)),
+        )
+      : new Map<string, ExistingMember>();
     return {
       items: data.map((r) => ({
         id: r.id,
@@ -193,6 +244,18 @@ export class ResidentRequests {
         resolvedPersonId: r.resolvedPersonId,
         membershipId: r.membershipId,
         occupancyId: r.occupancyId,
+        ...(withApplicantContact
+          ? {
+              committeeContact:
+                r.status === 'PENDING' ? (contacts.get(String(r.society_id)) ?? null) : null,
+            }
+          : {}),
+        ...(options.memberScope
+          ? {
+              existingMember:
+                r.status === 'PENDING' ? (members.get(String(r.user_id)) ?? null) : null,
+            }
+          : {}),
       })),
       total: Number(total),
       page: page.page,
@@ -202,12 +265,59 @@ export class ResidentRequests {
   async own(session: Session, page: PageInput) {
     return this.identity.property.access.database.transaction(async (db) => {
       const user = await this.identity.actor(db, session);
-      return this.list(db, 'r.user_id=?', [user.id], page);
+      return this.list(db, 'r.user_id=?', [user.id], page, { applicantContact: true });
     });
+  }
+  /** Membership status and current homes, within the committee's society, for the given accounts. */
+  private async memberHomes(
+    db: PoolConnection,
+    scope: TenantScope,
+    userIds: string[],
+  ): Promise<Map<string, ExistingMember>> {
+    const ids = [...new Set(userIds)];
+    if (!ids.length) return new Map();
+    const memberships = await rows<
+      RowDataPacket & { userId: string; status: string; personId: string }
+    >(
+      db,
+      'SELECT m.user_id AS userId,m.status,COALESCE(l.person_id,u.person_id) AS personId FROM society_memberships m JOIN users u ON u.id=m.user_id LEFT JOIN membership_person_links l ON l.society_id=m.society_id AND l.membership_id=m.id WHERE m.society_id=? AND m.user_id IN (' +
+        ids.map(() => '?').join(',') +
+        ')',
+      [scope.societyId, ...ids],
+    );
+    if (!memberships.length) return new Map();
+    const people = [...new Set(memberships.map((m) => String(m.personId)))];
+    const homes = await rows<RowDataPacket & MemberHome & { personId: string }>(
+      db,
+      "SELECT o.person_id AS personId,b.code AS buildingCode,b.name AS buildingName,f.flat_number AS flatNumber,o.occupancy_type AS occupancyType,o.starts_on AS startsOn,o.ends_on AS endsOn,CASE WHEN o.starts_on>? THEN 'UPCOMING' WHEN o.ends_on IS NOT NULL AND o.ends_on<? THEN 'ENDED' ELSE 'CURRENT' END AS state FROM flat_occupancies o JOIN flats f ON f.society_id=o.society_id AND f.id=o.flat_id JOIN buildings b ON b.society_id=f.society_id AND b.id=f.building_id WHERE o.society_id=? AND o.person_id IN (" +
+        people.map(() => '?').join(',') +
+        // Current homes first, then upcoming, then history (most recent first).
+        ") ORDER BY FIELD(state,'CURRENT','UPCOMING','ENDED'),o.starts_on DESC,o.id DESC",
+      [scope.today, scope.today, scope.societyId, ...people],
+    );
+    return new Map(
+      memberships.map((m) => [
+        String(m.userId),
+        {
+          status: m.status,
+          homes: homes
+            .filter((h) => String(h.personId) === String(m.personId))
+            .map((h) => ({
+              buildingCode: h.buildingCode,
+              buildingName: h.buildingName,
+              flatNumber: h.flatNumber,
+              occupancyType: h.occupancyType,
+              startsOn: String(h.startsOn),
+              endsOn: h.endsOn === null ? null : String(h.endsOn),
+              state: h.state,
+            })),
+        },
+      ]),
+    );
   }
   async pending(session: Session, page: PageInput) {
     return this.identity.property.within(session, false, async (db, scope) => ({
-      ...(await this.list(db, 'r.society_id=?', [scope.societyId], page)),
+      ...(await this.list(db, 'r.society_id=?', [scope.societyId], page, { memberScope: scope })),
       today: scope.today,
     }));
   }
@@ -282,8 +392,15 @@ export class ResidentRequests {
         )
       )[0];
       if (!user) throw conflict();
+      // An existing member's additional home attaches to the person their membership links to.
+      const existing = await this.identity.membership(db, scope.societyId, user.id);
+      if (existing && existing.status !== 'ACTIVE') throw conflict();
+      if (existing && input.personId && input.personId !== existing.personId) throw conflict();
       let personId = input.personId;
-      if (personId) {
+      if (existing) {
+        personId = existing.personId;
+        assertUnarchived(await this.identity.property.personRow(db, scope, personId));
+      } else if (personId) {
         assertUnarchived(await this.identity.property.personRow(db, scope, personId));
       } else {
         personId = user.person_id;
@@ -342,7 +459,12 @@ export class ResidentRequests {
           audit,
         );
       }
-      const membership = await this.identity.member(db, scope.societyId, user, personId);
+      const membership = await this.identity.residentMembership(
+        db,
+        scope.societyId,
+        user,
+        personId,
+      );
       await db.execute(
         'UPDATE registration_request_details SET resolved_person_id=?,approved_membership_id=?,approved_occupancy_id=? WHERE society_id=? AND request_id=?',
         [personId, membership, occupancyId, scope.societyId, id],

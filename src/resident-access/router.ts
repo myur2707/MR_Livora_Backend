@@ -4,6 +4,7 @@ import type { Security } from '../http/security.js';
 import type { ResidentAccounts } from './accounts.js';
 import type { ResidentInvitations } from './invitations.js';
 import type { ResidentRequests } from './requests.js';
+import type { SocietyContacts } from './contacts.js';
 import {
   parse,
   identifier,
@@ -17,11 +18,13 @@ import {
   pageSchema,
   decisionSchema,
   approvalSchema,
+  societyContactSchema,
 } from './contracts.js';
 export interface ResidentAccessModule {
   accounts: ResidentAccounts;
   invitations: ResidentInvitations;
   requests: ResidentRequests;
+  contacts: SocietyContacts;
 }
 export function residentAccessRouter(security: Security, module: ResidentAccessModule) {
   const router = Router();
@@ -97,6 +100,15 @@ export function residentAccessRouter(security: Security, module: ResidentAccessM
   );
   router.get('/society/registration-requests', ...guards, async (r, s) =>
     s.json(await module.requests.pending(session(r), parse(pageSchema, r.query))),
+  );
+  // The contact a committee publishes for applicants whose requests are awaiting review.
+  router.get('/society/applicant-contact', ...guards, async (r, s) =>
+    s.json(await module.contacts.get(session(r))),
+  );
+  router.post('/society/applicant-contact', security.csrf, ...guards, async (r, s) =>
+    s.json(
+      await module.contacts.update(session(r), parse(societyContactSchema, r.body), audit(r, s)),
+    ),
   );
   router.post('/society/resident-invitations', security.csrf, ...guards, async (r, s) => {
     const body = parse(inviteSchema, r.body);

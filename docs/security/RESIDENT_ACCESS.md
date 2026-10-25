@@ -14,6 +14,14 @@ Approval requires an explicit verification attestation and a note. The committee
 
 Matching name, email or mobile does not merge people during registration. Approval requires committee verification against its records. Phone is validated contact information, not an authentication factor; no SMS verification service is implemented. Email possession alone is not sufficient to claim a flat.
 
+## Additional homes in the same society
+
+One account keeps a single membership per society, but a person may live in or own more than one home there. An active member may therefore submit a join request for another flat or row house in a society where they are already a member. The server refuses a request for a home the member's linked person currently occupies (`RESIDENT_HOME_ALREADY_LINKED`) and keeps one pending request per account per society (`RESIDENT_REQUEST_PENDING`). Non-active memberships still cannot request. On approval the new occupancy attaches to the person already linked to that membership; the committee cannot attach it to a different person, the existing membership is reused and the RESIDENT role is added only if missing. Occupancy history, verification and audit rules are unchanged.
+
+## Committee applicant contact
+
+A committee administrator may publish a society contact (phone and/or email) for applicants. Nothing personal is shown unless a committee administrator deliberately enters it; clearing both fields un-publishes it. Applicants see it only on their own requests while they are PENDING. It is never added to committee queues, public lookups or the society search. Updates are audited with which fields are published, not their values. Runtime access is SELECT/INSERT plus column-limited UPDATE, with no delete.
+
 ## Invitations and tokens
 
 The committee selects an existing, unarchived person with a normalized contact email and a current occupancy in the selected active flat/building. The server fixes the intended action to RESIDENT_JOIN and the role to RESIDENT. The token has 32 cryptographically random bytes; only its SHA-256 digest is stored. It expires in 72 hours and must still be PENDING at acceptance.
@@ -59,5 +67,7 @@ All paths below have the `/api/v1` prefix. All POSTs require the same-origin JSO
 | GET /society/registration-requests                      | committee; page/status; includes society-local today                                                                   |
 | POST /society/registration-requests/:id/approve         | committee; confirmed:true, note, personId/null, flatId, existingOccupancyId/null, occupancyType, startsOn, endsOn/null |
 | POST /society/registration-requests/:id/reject          | committee; confirmed:true, note                                                                                        |
+| GET /society/applicant-contact                          | committee; returns contactPhone/null, contactEmail/null                                                                |
+| POST /society/applicant-contact                         | committee; contactPhone/null, contactEmail/null; audited                                                               |
 
 Apply additive migrations 010–011 with the migrator, then the column-specific grants in `src/database/resident-access-grants.ts`, before deploying the new backend. Original migrations 001–009 remain unchanged; historical rows without Step 6 detail records are retained. The managed Windows runner's additive upgrade handles both migrations/grants after a stop/start. Never point integration tests at the managed manual schema or production.

@@ -24,6 +24,18 @@ export const conflict = () =>
     'RESIDENT_ACCESS_CONFLICT',
     'This person or account is already linked, or the request changed. Refresh and review the records.',
   );
+export const homeAlreadyLinked = () =>
+  new ApiError(
+    409,
+    'RESIDENT_HOME_ALREADY_LINKED',
+    'You already have access to this home. Choose a different flat or row house.',
+  );
+export const requestPending = () =>
+  new ApiError(
+    409,
+    'RESIDENT_REQUEST_PENDING',
+    'You already have a pending request in this community. Wait for the committee or cancel it first.',
+  );
 export class ResidentIdentity {
   private readonly sessions: OnboardingRepository;
   constructor(readonly property: PropertyService) {
@@ -61,6 +73,61 @@ export class ResidentIdentity {
     }).formatToParts(new Date(this.property.access.clock()));
     const part = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
     return { name: s.name, today: part('year') + '-' + part('month') + '-' + part('day') };
+  }
+  /** The account's membership in a society and the person it is linked to, if any. */
+  async membership(
+    db: PoolConnection,
+    societyId: string,
+    userId: string,
+  ): Promise<{ id: string; status: string; personId: string } | undefined> {
+    return (
+      await rows<RowDataPacket & { id: string; status: string; personId: string }>(
+        db,
+        'SELECT m.id,m.status,COALESCE(l.person_id,u.person_id) AS personId FROM society_memberships m JOIN users u ON u.id=m.user_id LEFT JOIN membership_person_links l ON l.society_id=m.society_id AND l.membership_id=m.id WHERE m.society_id=? AND m.user_id=? FOR SHARE',
+        [societyId, userId],
+      )
+    )[0];
+  }
+  /** Gives an existing member the resident role when they are approved for another home. */
+  async ensureResidentRole(
+    db: PoolConnection,
+    societyId: string,
+    membershipId: string,
+  ): Promise<void> {
+    const role = (
+      await rows<RowDataPacket & { id: string }>(
+        db,
+        "SELECT id FROM roles WHERE society_id=? AND code='RESIDENT' AND archived_at IS NULL",
+        [societyId],
+      )
+    )[0];
+    if (!role) throw conflict();
+    const assigned = await rows(
+      db,
+      'SELECT 1 FROM membership_roles WHERE society_id=? AND membership_id=? AND role_id=? FOR SHARE',
+      [societyId, membershipId, role.id],
+    );
+    if (!assigned.length)
+      await db.execute(
+        'INSERT INTO membership_roles(society_id,membership_id,role_id) VALUES(?,?,?)',
+        [societyId, membershipId, role.id],
+      );
+  }
+  /**
+   * Resident membership for an approved home: reuses the account's existing active membership in
+   * the society (a second home) when it belongs to the same person, otherwise creates one.
+   */
+  async residentMembership(
+    db: PoolConnection,
+    societyId: string,
+    user: ResidentUserData,
+    personId: string,
+  ): Promise<string> {
+    const existing = await this.membership(db, societyId, user.id);
+    if (!existing) return this.member(db, societyId, user, personId);
+    if (existing.status !== 'ACTIVE' || existing.personId !== personId) throw conflict();
+    await this.ensureResidentRole(db, societyId, existing.id);
+    return existing.id;
   }
   async member(
     db: PoolConnection,

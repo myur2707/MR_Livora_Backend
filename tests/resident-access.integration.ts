@@ -16,6 +16,7 @@ import { ResidentAccounts } from '../src/resident-access/accounts.js';
 import { ResidentIdentity } from '../src/resident-access/identity.js';
 import { ResidentInvitations } from '../src/resident-access/invitations.js';
 import { ResidentRequests } from '../src/resident-access/requests.js';
+import { SocietyContacts } from '../src/resident-access/contacts.js';
 import { createApp } from '../src/http/app.js';
 import { AuthClient } from './auth-client.js';
 import { createFixture, insert } from './fixtures.js';
@@ -124,14 +125,15 @@ export async function residentAccessIntegration(suite: TestContext, db: Connecti
   );
   const identity = new ResidentIdentity(property),
     invitations = new ResidentInvitations(identity, accounts),
-    requests = new ResidentRequests(identity, occupancy);
+    contacts = new SocietyContacts(property),
+    requests = new ResidentRequests(identity, occupancy, contacts);
   const server = createApp(
     auth,
     (code) => logs.push(code),
     undefined,
     undefined,
     { service: property, occupancy, imports },
-    { accounts, invitations, requests },
+    { accounts, invitations, requests, contacts },
   ).listen(0, '127.0.0.1');
   await once(server, 'listening');
   const address = server.address();
@@ -529,6 +531,13 @@ export async function residentAccessIntegration(suite: TestContext, db: Connecti
         assert.equal(r.status, 201, r.raw);
         requestId = String(r.data['id']);
         assert.equal(r.data['status'], 'PENDING');
+        const newcomer = (
+          (await committee.request('/society/registration-requests')).data['items'] as Record<
+            string,
+            unknown
+          >[]
+        ).find((i) => i['id'] === requestId);
+        assert.equal(newcomer?.['existingMember'], null);
         assert.deepEqual((await joiner.request('/auth/session')).data['memberships'], []);
         assert.equal(
           (await joiner.request('/auth/society-context', { societyId: String(a.society) })).status,
@@ -652,6 +661,224 @@ export async function residentAccessIntegration(suite: TestContext, db: Connecti
             "UPDATE registration_requests SET status='PENDING',reviewed_at=NULL,reviewed_by_membership_id=NULL WHERE id=?",
             [requestId],
           ),
+        );
+      },
+    );
+    // Dedicated actors keep these tests inside their own join/invite rate-limit windows.
+    const homeowner = await account('step6-two-homes@example.invalid');
+    const owner = client();
+    await owner.login(homeowner.email, password);
+    await suite.test(
+      'an approved resident can request a second home in the same society and see the committee contact',
+      async () => {
+        const errorCode = (r: { data: Record<string, unknown> }) => {
+          const error = r.data['error'];
+          return typeof error === 'object' && error !== null && 'code' in error
+            ? error.code
+            : undefined;
+        };
+        const first = await owner.request('/resident-access/requests', {
+          ...claim,
+          occupancyType: 'OWNER',
+        });
+        assert.equal(first.status, 201, first.raw);
+        const firstId = String(first.data['id']);
+        const firstApproval = await committee.request(
+          '/society/registration-requests/' + firstId + '/approve',
+          { ...approval, occupancyType: 'OWNER' },
+        );
+        assert.equal(firstApproval.status, 204, firstApproval.raw);
+        const secondFlat = await insert(
+          db,
+          "INSERT INTO flats (society_id, building_id, flat_number) VALUES (?, ?, '102')",
+          [a.society, a.building],
+        );
+        const again = await owner.request('/resident-access/requests', claim);
+        assert.equal(again.status, 409);
+        assert.equal(errorCode(again), 'RESIDENT_HOME_ALREADY_LINKED');
+        const contact = {
+          contactPhone: '+91 90000 00000',
+          contactEmail: 'committee@example.invalid',
+        };
+        assert.equal((await holder.request('/society/applicant-contact', contact)).status, 403);
+        const published = await committee.request('/society/applicant-contact', contact);
+        assert.equal(published.status, 200, published.raw);
+        assert.deepEqual(published.data, contact);
+        assert.deepEqual((await committee.request('/society/applicant-contact')).data, contact);
+        const [contactAudit] = await db.execute<RowDataPacket[]>(
+          "SELECT safe_metadata FROM audit_logs WHERE society_id=? AND action='society.applicant_contact_updated'",
+          [a.society],
+        );
+        assert.equal(contactAudit.length, 1);
+        assert.equal(JSON.stringify(contactAudit[0]).includes('90000'), false);
+        // A past home must appear as history, not be hidden or counted as current.
+        const pastFlat = await insert(
+          db,
+          "INSERT INTO flats (society_id, building_id, flat_number) VALUES (?, ?, '104')",
+          [a.society, a.building],
+        );
+        await db.execute(
+          "INSERT INTO flat_occupancies(society_id,flat_id,person_id,occupancy_type,starts_on,ends_on) VALUES(?,?,?,'TENANT','2019-01-01','2019-12-31')",
+          [a.society, pastFlat, homeowner.person],
+        );
+        const second = await owner.request('/resident-access/requests', {
+          ...claim,
+          flatNumber: '102',
+          occupancyType: 'OWNER',
+        });
+        assert.equal(second.status, 201, second.raw);
+        const secondId = String(second.data['id']);
+        const duplicate = await owner.request('/resident-access/requests', {
+          ...claim,
+          flatNumber: '102',
+        });
+        assert.equal(duplicate.status, 409);
+        assert.equal(errorCode(duplicate), 'RESIDENT_REQUEST_PENDING');
+        const own = await owner.request('/resident-access/requests?status=all');
+        const items = own.data['items'] as Record<string, unknown>[];
+        assert.deepEqual(items.find((i) => i['id'] === secondId)?.['committeeContact'], contact);
+        assert.equal(items.find((i) => i['id'] === firstId)?.['committeeContact'], null);
+        const queue = await committee.request('/society/registration-requests?status=all');
+        const queued = queue.data['items'] as Record<string, unknown>[];
+        assert.equal(
+          queued.some((i) => 'committeeContact' in i),
+          false,
+        );
+        // The committee is told this applicant already belongs here, and which homes they hold.
+        assert.deepEqual(queued.find((i) => i['id'] === secondId)?.['existingMember'], {
+          status: 'ACTIVE',
+          homes: [
+            {
+              buildingCode: 'A',
+              buildingName: 'Block A',
+              flatNumber: '101',
+              occupancyType: 'OWNER',
+              startsOn: '2020-01-01',
+              endsOn: null,
+              state: 'CURRENT',
+            },
+            {
+              buildingCode: 'A',
+              buildingName: 'Block A',
+              flatNumber: '104',
+              occupancyType: 'TENANT',
+              startsOn: '2019-01-01',
+              endsOn: '2019-12-31',
+              state: 'ENDED',
+            },
+          ],
+        });
+        assert.equal(queued.find((i) => i['id'] === firstId)?.['existingMember'], null);
+        assert.equal(
+          items.some((i) => 'existingMember' in i),
+          false,
+        );
+        const secondApproval = { ...approval, flatId: String(secondFlat), occupancyType: 'OWNER' };
+        assert.equal(
+          (
+            await committee.request('/society/registration-requests/' + secondId + '/approve', {
+              ...secondApproval,
+              personId: String(target.id),
+            })
+          ).status,
+          409,
+        );
+        const approved = await committee.request(
+          '/society/registration-requests/' + secondId + '/approve',
+          secondApproval,
+        );
+        assert.equal(approved.status, 204, approved.raw);
+        const [members] = await db.execute<RowDataPacket[]>(
+          'SELECT id FROM society_memberships WHERE society_id=? AND user_id=?',
+          [a.society, homeowner.user],
+        );
+        assert.equal(members.length, 1);
+        const [homes] = await db.execute<RowDataPacket[]>(
+          'SELECT flat_id FROM flat_occupancies WHERE society_id=? AND person_id=? AND ends_on IS NULL ORDER BY flat_id',
+          [a.society, homeowner.person],
+        );
+        assert.deepEqual(
+          homes.map((h) => String(h['flat_id'])),
+          [String(a.flat), String(secondFlat)],
+        );
+        const [details] = await db.execute<RowDataPacket[]>(
+          'SELECT approved_membership_id FROM registration_request_details WHERE society_id=? AND request_id=?',
+          [a.society, secondId],
+        );
+        assert.equal(String(details[0]?.['approved_membership_id']), String(members[0]?.['id']));
+        assert.equal(
+          (await owner.request('/auth/society-context', { societyId: String(a.society) })).status,
+          204,
+        );
+        assert.equal((await owner.request('/society/access')).status, 200);
+      },
+    );
+    await suite.test(
+      'an existing member invited for another home keeps one membership when accepting',
+      async () => {
+        // A second committee admin: earlier tests use up the first admin's invitation window.
+        const deputy = await account('step6-deputy-admin@example.invalid');
+        await db.execute(
+          'INSERT INTO society_persons (society_id, person_id, display_name) VALUES (?, ?, ?)',
+          [a.society, deputy.person, 'Deputy committee admin'],
+        );
+        const deputyMembership = await insert(
+          db,
+          "INSERT INTO society_memberships (society_id, user_id, status, joined_at) VALUES (?, ?, 'ACTIVE', '2020-01-01 00:00:00')",
+          [a.society, deputy.user],
+        );
+        await db.execute(
+          'INSERT INTO membership_roles (society_id, membership_id, role_id) VALUES (?, ?, ?)',
+          [a.society, deputyMembership, a.role],
+        );
+        const deputyClient = client();
+        await deputyClient.login(deputy.email, password);
+        // Joined before the suite's fixed domain clock, so the membership is already active.
+        assert.equal(
+          (await deputyClient.request('/auth/society-context', { societyId: String(a.society) }))
+            .status,
+          204,
+        );
+        const thirdFlat = await insert(
+          db,
+          "INSERT INTO flats (society_id, building_id, flat_number) VALUES (?, ?, '103')",
+          [a.society, a.building],
+        );
+        await db.execute(
+          "INSERT INTO flat_occupancies(society_id,flat_id,person_id,occupancy_type,starts_on) VALUES(?,?,?,'OWNER','2020-01-01')",
+          [a.society, thirdFlat, homeowner.person],
+        );
+        const invited = await deputyClient.request('/society/resident-invitations', {
+          personId: String(homeowner.person),
+          flatId: String(thirdFlat),
+          confirmed: true,
+        });
+        assert.equal(invited.status, 201, invited.raw);
+        await queue.idle();
+        const token = latest(homeowner.email);
+        // Earlier tests deliberately exhaust the per-IP acceptance limit for loopback, and limits
+        // must not be cleared, so accept through the service with the member's real session.
+        const session = await auth.readSession(owner.cookie.split('=')[1] ?? '');
+        assert.ok(session);
+        await invitations.accept(session, token, undefined, auth.audit('127.0.0.1', 'two-homes'));
+        const [members] = await db.execute<RowDataPacket[]>(
+          'SELECT id FROM society_memberships WHERE society_id=? AND user_id=?',
+          [a.society, homeowner.user],
+        );
+        assert.equal(members.length, 1);
+        const [details] = await db.execute<RowDataPacket[]>(
+          'SELECT accepted_membership_id FROM resident_invitation_details WHERE society_id=? AND invitation_id=?',
+          [a.society, String(invited.data['id'])],
+        );
+        assert.equal(String(details[0]?.['accepted_membership_id']), String(members[0]?.['id']));
+        const [homes] = await db.execute<RowDataPacket[]>(
+          'SELECT COUNT(*) AS total FROM flat_occupancies WHERE society_id=? AND person_id=? AND ends_on IS NULL',
+          [a.society, homeowner.person],
+        );
+        assert.equal(Number(homes[0]?.['total']), 3);
+        await assert.rejects(
+          invitations.accept(session, token, undefined, auth.audit('127.0.0.1', 'two-homes')),
+          /unavailable|expired/i,
         );
       },
     );

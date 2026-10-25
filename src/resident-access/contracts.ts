@@ -63,7 +63,16 @@ export const approvalSchema = z
     endsOn: dateOnly.nullable(),
   })
   .refine((v) => !v.endsOn || v.endsOn >= v.startsOn);
+/**
+ * Committee-published contact shown to applicants on their own pending requests.
+ * Clearing both fields un-publishes it.
+ */
+export const societyContactSchema = z.strictObject({
+  contactPhone: personInput.shape.contactPhone,
+  contactEmail: email.nullable(),
+});
 export type JoinInput = z.infer<typeof joinSchema>;
+export type SocietyContactInput = z.infer<typeof societyContactSchema>;
 export type JoinPropertyOptionsInput = z.infer<typeof joinPropertyOptionsSchema>;
 export type ApprovalInput = z.infer<typeof approvalSchema>;
 export type PageInput = z.infer<typeof pageSchema>;

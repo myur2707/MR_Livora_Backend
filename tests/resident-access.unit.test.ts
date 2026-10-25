@@ -8,6 +8,7 @@ import {
   approvalSchema,
   joinSocietyOptionsSchema,
   joinPropertyOptionsSchema,
+  societyContactSchema,
 } from '../src/resident-access/contracts.js';
 void test('resident boundary rejects protected identifiers, roles and identity changes', () => {
   const join = {
@@ -89,4 +90,31 @@ void test('signup and acceptance bound passwords, normalize emails and validate 
     false,
   );
   assert.equal(acceptanceSchema.safeParse({ token: '../token' }).success, false);
+});
+void test('the applicant contact accepts a phone, an email or neither, and nothing else', () => {
+  assert.equal(
+    societyContactSchema.safeParse({ contactPhone: '+91 90000 00000', contactEmail: null }).success,
+    true,
+  );
+  assert.deepEqual(
+    societyContactSchema.parse({ contactPhone: null, contactEmail: ' Committee@Example.invalid ' }),
+    { contactPhone: null, contactEmail: 'committee@example.invalid' },
+  );
+  assert.equal(
+    societyContactSchema.safeParse({ contactPhone: null, contactEmail: null }).success,
+    true,
+  );
+  assert.equal(
+    societyContactSchema.safeParse({ contactPhone: 'call me', contactEmail: null }).success,
+    false,
+  );
+  assert.equal(
+    societyContactSchema.safeParse({ contactPhone: null, contactEmail: 'not-an-email' }).success,
+    false,
+  );
+  assert.equal(
+    societyContactSchema.safeParse({ contactPhone: null, contactEmail: null, societyId: '1' })
+      .success,
+    false,
+  );
 });

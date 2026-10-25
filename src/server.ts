@@ -19,6 +19,7 @@ import { ResidentAccounts } from './resident-access/accounts.js';
 import { ResidentIdentity } from './resident-access/identity.js';
 import { ResidentInvitations } from './resident-access/invitations.js';
 import { ResidentRequests } from './resident-access/requests.js';
+import { SocietyContacts } from './resident-access/contacts.js';
 import { BillingAccess } from './billing/access.js';
 import { billingModule } from './billing/router.js';
 import { paymentModule } from './payments/router.js';
@@ -57,10 +58,12 @@ try {
   const residentQueue = new ResetQueue((code, id) => log(code.replace('RESET_', 'RESIDENT_'), id));
   const accounts = new ResidentAccounts(auth, config.APP_ORIGIN, mailer, residentQueue);
   const residentIdentity = new ResidentIdentity(property);
+  const societyContacts = new SocietyContacts(property);
   const residentAccess = {
     accounts,
     invitations: new ResidentInvitations(residentIdentity, accounts),
-    requests: new ResidentRequests(residentIdentity, occupancy),
+    requests: new ResidentRequests(residentIdentity, occupancy, societyContacts),
+    contacts: societyContacts,
   };
   const server = createApp(
     auth,

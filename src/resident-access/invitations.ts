@@ -337,7 +337,13 @@ export class ResidentInvitations {
           password_hash: encoded,
         };
       }
-      const membership = await this.identity.member(db, i.society_id, user, i.person_id);
+      // An existing member invited for another home keeps their membership.
+      const membership = await this.identity.residentMembership(
+        db,
+        i.society_id,
+        user,
+        i.person_id,
+      );
       await db.execute(
         'UPDATE resident_invitation_details SET accepted_membership_id=? WHERE society_id=? AND invitation_id=?',
         [membership, i.society_id, i.id],
