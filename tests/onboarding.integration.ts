@@ -222,7 +222,46 @@ export async function onboardingIntegration(suite: TestContext, db: Connection):
           'totalSocieties',
           'pendingVerification',
           'updatedAt',
+          'societiesByMonth',
+          'accounts',
         ]);
+        // Platform charts carry lifecycle/account metadata only, never tenant financial data.
+        assert.ok(Array.isArray(dashboard.data['societiesByMonth']));
+        assert.equal(dashboard.data['societiesByMonth'].length, 6);
+        assert.ok(!dashboard.raw.includes('outstanding'));
+        // Auto codes: per-type sequence, duplicates get a specific error, platform only.
+        const next = async (type: string) => {
+          const response = await platform.request('/platform/societies/next-code?type=' + type);
+          assert.equal(response.status, 200, response.raw);
+          return String(response.data['code']);
+        };
+        const first = await next('TWP');
+        assert.match(first, /^TWP-\d{5,}$/);
+        await create(first);
+        const second = await next('TWP');
+        assert.equal(Number(second.slice(4)), Number(first.slice(4)) + 1);
+        const taken = await platform.request('/platform/societies', {
+          code: first,
+          name: 'Duplicate',
+          timezone: 'Asia/Kolkata',
+        });
+        assert.equal(taken.status, 409);
+        assert.deepEqual(
+          (taken.data['error'] as Record<string, unknown> | undefined)?.['code'],
+          'CODE_TAKEN',
+        );
+        // A code in the earlier four-digit format still advances the five-digit sequence.
+        const before = Number((await next('FLT')).slice(4));
+        await create('FLT-' + String(before + 6).padStart(4, '0'));
+        assert.equal(await next('FLT'), 'FLT-' + String(before + 7).padStart(5, '0'));
+        assert.equal(
+          (await platform.request('/platform/societies/next-code?type=BAD')).status,
+          400,
+        );
+        assert.equal(
+          (await outsider.request('/platform/societies/next-code?type=SOC')).status,
+          403,
+        );
       },
     );
     await suite.test(

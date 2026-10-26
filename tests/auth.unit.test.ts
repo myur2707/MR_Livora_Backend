@@ -23,8 +23,13 @@ void test('transactional email includes branded HTML, plain text and escaped dyn
       link: 'https://app.example/invite?token=a&next=<home>',
       details: ['Single-use link', 'Expires in 72 hours'],
       securityNote: 'Ignore this message if you did not expect it.',
+      logoUrl: 'https://app.example/assets/brand/logo.png',
     },
     2026,
+  );
+  assert.match(
+    email.html,
+    /<img src="https:\/\/app\.example\/assets\/brand\/logo\.png"[^>]*alt="Mr\. Livora"/,
   );
   assert.match(email.html, /background:#111111/);
   assert.match(email.html, /background:#c91f26/);
@@ -33,6 +38,21 @@ void test('transactional email includes branded HTML, plain text and escaped dyn
   assert.doesNotMatch(email.html, /Join <Unsafe>/);
   assert.match(email.text, /Join <Unsafe> Community/);
   assert.match(email.text, /© 2026 Mr\. Livora\. All rights reserved\./);
+});
+
+void test('transactional email without a logo keeps a text-only header', () => {
+  const email = transactionalEmail({
+    preheader: 'p',
+    eyebrow: 'e',
+    title: 't',
+    introduction: 'i',
+    actionLabel: 'a',
+    link: 'https://app.example/x',
+    details: [],
+    securityNote: 's',
+  });
+  assert.doesNotMatch(email.html, /<img/);
+  assert.match(email.html, /Mr\. <span style="color:#ef3139">Livora<\/span>/);
 });
 
 void test('Argon2id hashes use independent salts and the reviewed work factors', async () => {

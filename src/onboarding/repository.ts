@@ -3,8 +3,10 @@ import type { RuntimeDatabase } from '../database/runtime.js';
 import type { Session, RequestAudit } from '../auth/types.js';
 import { sqlTime } from '../auth/repository.js';
 import { ApiError } from '../http/errors.js';
-import type { SocietyStatus, PageInput } from './contracts.js';
+import type { SocietyStatus, PageInput, CommunityType } from './contracts.js';
+import { communityCode } from './contracts.js';
 import type { Requirements } from './policy.js';
+import { recentMonths } from '../reports/dates.js';
 export type Scope = 'platform' | 'committee';
 export interface SetupRow extends RowDataPacket {
   society_id: string;
@@ -207,6 +209,21 @@ export class OnboardingRepository {
       ],
     );
   }
+  /**
+   * Next free code of a type; archived communities count too, so a code is never reused.
+   * Four-digit codes from the earlier format still advance the sequence.
+   */
+  async nextCode(session: Session, type: CommunityType) {
+    return this.database.transaction(async (db) => {
+      await this.platform(db, session);
+      const found = await rows<RowDataPacket & { highest: string | number | null }>(
+        db,
+        'SELECT MAX(CAST(SUBSTRING(code,5) AS UNSIGNED)) AS highest FROM societies WHERE code REGEXP ?',
+        ['^' + type + '-[0-9]{4,}$'],
+      );
+      return { code: communityCode(type, Number(found[0]?.highest ?? 0) + 1) };
+    });
+  }
   async list(session: Session, page: PageInput) {
     return this.database.transaction(async (db) => {
       await this.platform(db, session);
@@ -249,6 +266,18 @@ export class OnboardingRepository {
         db,
         'SELECT status,COUNT(*) AS total FROM societies WHERE archived_at IS NULL GROUP BY status',
       );
+      // Platform metadata only: society lifecycle and global account states, never tenant records.
+      const months = recentMonths(new Date(this.clock()).toISOString().slice(0, 10), 6);
+      const created = await rows<RowDataPacket & { month: string; total: string | number }>(
+        db,
+        "SELECT DATE_FORMAT(created_at,'%Y-%m') AS month,COUNT(*) AS total FROM societies WHERE archived_at IS NULL AND created_at>=? GROUP BY month",
+        [(months[0] ?? '') + '-01 00:00:00'],
+      );
+      const accounts = await rows<RowDataPacket & { status: string; total: string | number }>(
+        db,
+        'SELECT status,COUNT(*) AS total FROM users GROUP BY status ORDER BY status',
+      );
+      const perMonth = new Map(created.map((row) => [row.month, Number(row.total)]));
       return {
         statuses: counts.map((row) => ({ status: row['status'], total: Number(row['total']) })),
         totalSocieties: counts.reduce((sum, row) => sum + Number(row.total), 0),
@@ -256,6 +285,8 @@ export class OnboardingRepository {
           counts.find((row) => row.status === 'PENDING_VERIFICATION')?.total ?? 0,
         ),
         updatedAt: new Date(this.clock()).toISOString(),
+        societiesByMonth: months.map((month) => ({ month, total: perMonth.get(month) ?? 0 })),
+        accounts: accounts.map((row) => ({ status: row.status, total: Number(row.total) })),
       };
     });
   }

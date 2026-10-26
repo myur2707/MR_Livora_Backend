@@ -3,7 +3,7 @@ import test from 'node:test';
 import { parse as parseCsv } from 'csv-parse/sync';
 import { reportCsv, csvCell } from '../src/reports/csv.js';
 import { reportQuery, validateFilters } from '../src/reports/contracts.js';
-import { utcRange, dayStart, nextDate } from '../src/reports/dates.js';
+import { utcRange, dayStart, nextDate, recentMonths } from '../src/reports/dates.js';
 import { decimalMoney } from '../src/reports/service.js';
 void test('CSV formulas, leading whitespace/controls, quotes and multiline cells are safely escaped', () => {
   const values = [
@@ -74,4 +74,16 @@ void test('exact report decimal formatting supports signed aggregates larger tha
   assert.equal(decimalMoney('0'), '0.00');
   assert.equal(decimalMoney('100.2'), '100.20');
   for (const value of [0.1, '1e10', '1.001', null]) assert.throws(() => decimalMoney(value));
+});
+
+void test('dashboard trend months end with the current month and cross year boundaries', () => {
+  assert.deepEqual(recentMonths('2026-02-14', 6), [
+    '2025-09',
+    '2025-10',
+    '2025-11',
+    '2025-12',
+    '2026-01',
+    '2026-02',
+  ]);
+  assert.deepEqual(recentMonths('2026-10-31', 1), ['2026-10']);
 });

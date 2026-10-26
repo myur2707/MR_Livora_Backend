@@ -142,6 +142,14 @@ export function parse<T>(schema: z.ZodType<T>, value: unknown): T {
   return result.data;
 }
 export type CreateSociety = z.infer<typeof createSocietySchema>;
+/** Code prefixes for new communities: Society, Flat, Township. The type lives only in the code. */
+export const communityTypes = ['SOC', 'FLT', 'TWP'] as const;
+export type CommunityType = (typeof communityTypes)[number];
+export const nextCodeSchema = z.strictObject({ type: z.enum(communityTypes) });
+/** SOC-00001 … SOC-99999, then SOC-100000: five digits minimum, growing as needed. */
+export function communityCode(type: CommunityType, sequence: number): string {
+  return type + '-' + String(sequence).padStart(5, '0');
+}
 export type BuildingInput = z.infer<typeof buildingSchema>;
 export type RowHousesInput = z.infer<typeof rowHousesSchema>;
 export type ResidentInput = z.infer<typeof residentSchema>;

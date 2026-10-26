@@ -30,3 +30,11 @@ export function dayStart(date: string, timezone: string): number {
 export function utcRange(from: string, to: string, timezone: string): [string, string] {
   return [sqlTime(dayStart(from, timezone)), sqlTime(dayStart(nextDate(to), timezone))];
 }
+/** The `count` calendar months ending with the month of `today`, oldest first, as YYYY-MM. */
+export function recentMonths(today: string, count: number): string[] {
+  const year = Number(today.slice(0, 4)),
+    month = Number(today.slice(5, 7)) - 1;
+  return Array.from({ length: count }, (_, index) =>
+    new Date(Date.UTC(year, month - (count - 1 - index), 1)).toISOString().slice(0, 7),
+  );
+}

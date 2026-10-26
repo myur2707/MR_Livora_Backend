@@ -14,6 +14,8 @@ import {
   maintenanceSchema,
   createSocietySchema,
   pageSchema,
+  communityCode,
+  nextCodeSchema,
 } from '../src/onboarding/contracts.js';
 void test('resident property choices and structure filters reject unsupported types and scope overrides', () => {
   for (const propertyType of ['FLAT', 'ROW_HOUSE']) {
@@ -210,4 +212,17 @@ void test('wing batches bound work, reject duplicate codes and protected fields,
     },
   ])
     assert.throws(() => parse(buildingBatchSchema, invalid));
+});
+
+void test('community codes use the type prefix and grow past four digits without reuse', () => {
+  assert.equal(communityCode('SOC', 1), 'SOC-00001');
+  assert.equal(communityCode('FLT', 1), 'FLT-00001');
+  assert.equal(communityCode('TWP', 1), 'TWP-00001');
+  assert.equal(communityCode('SOC', 42), 'SOC-00042');
+  assert.equal(communityCode('FLT', 99999), 'FLT-99999');
+  assert.equal(communityCode('TWP', 100000), 'TWP-100000');
+  assert.equal(nextCodeSchema.safeParse({ type: 'SOC' }).success, true);
+  for (const type of ['soc', 'XYZ', ''])
+    assert.equal(nextCodeSchema.safeParse({ type }).success, false, type);
+  assert.equal(nextCodeSchema.safeParse({ type: 'SOC', extra: '1' }).success, false);
 });

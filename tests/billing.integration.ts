@@ -181,6 +181,12 @@ export async function billingIntegration(suite: TestContext, db: Connection): Pr
         assert.equal((await anonymous.request('/society/billing/bills')).status, 401);
         assert.equal((await occupant.request('/society/billing/bills')).status, 403);
         assert.equal((await root.request('/society/billing/bills')).status, 403);
+        // Paginated totals are JSON numbers (BIGINT COUNT would otherwise arrive as a string).
+        for (const resource of ['charge-types', 'configurations', 'periods', 'flats']) {
+          const listed = await committee.request('/society/billing/' + resource);
+          assert.equal(listed.status, 200);
+          assert.equal(typeof listed.data['total'], 'number', resource);
+        }
         assert.equal(
           (
             await bookkeeper.request('/society/billing/charge-types', {

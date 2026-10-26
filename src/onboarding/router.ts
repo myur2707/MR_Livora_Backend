@@ -7,6 +7,7 @@ import {
   parse,
   identifier,
   createSocietySchema,
+  nextCodeSchema,
   pageSchema,
   residentPageSchema,
   structurePageSchema,
@@ -36,6 +37,14 @@ export function onboardingRouter(
   );
   router.get('/platform/societies', security.authenticated, security.platform, async (r, s) =>
     s.json(await onboarding.repository.list(session(r), parse(pageSchema, r.query))),
+  );
+  // Registered before /platform/societies/:id so "next-code" is never read as an identifier.
+  router.get(
+    '/platform/societies/next-code',
+    security.authenticated,
+    security.platform,
+    async (r, s) =>
+      s.json(await onboarding.repository.nextCode(session(r), parse(nextCodeSchema, r.query).type)),
   );
   router.post(
     '/platform/societies',

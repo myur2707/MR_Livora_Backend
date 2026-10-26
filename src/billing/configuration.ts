@@ -78,7 +78,12 @@ export class BillingConfiguration {
         'SELECT ' + resource.select + from + ' ORDER BY t.id DESC LIMIT ? OFFSET ?',
         [...values, query.pageSize, (query.page - 1) * query.pageSize],
       );
-      return { items, total: count[0]?.total ?? 0, page: query.page, pageSize: query.pageSize };
+      return {
+        items,
+        total: Number(count[0]?.total ?? 0),
+        page: query.page,
+        pageSize: query.pageSize,
+      };
     });
   }
   async addType(session: Session, input: z.infer<typeof typeInput>, audit: RequestAudit) {

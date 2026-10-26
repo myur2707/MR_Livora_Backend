@@ -13,6 +13,8 @@ interface EmailTemplateInput {
   link: string;
   details: readonly string[];
   securityNote: string;
+  /** Absolute URL of the brand logo, served by the web app; omitted → text-only header. */
+  logoUrl?: string;
 }
 export interface TransactionalEmail {
   text: string;
@@ -38,6 +40,10 @@ export function transactionalEmail(
     )
     .join('');
   const safeLink = escapeHtml(input.link);
+  // A hosted image (not an attachment) keeps messages small; alt text covers blocked images.
+  const logo = input.logoUrl
+    ? `<td style="padding-right:14px;vertical-align:middle"><img src="${escapeHtml(input.logoUrl)}" width="56" height="56" alt="Mr. Livora" style="display:block;border:0;border-radius:50%;background:#ffffff"></td>`
+    : '';
   const text = `${input.title}\n\n${input.introduction}\n\n${input.actionLabel}:\n${input.link}\n\n${detailsText}\n\nSecurity note: ${input.securityNote}\n\nMr. Livora — Live in a Better Aura\n© ${copyrightYear} Mr. Livora. All rights reserved.`;
   const html = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(input.title)}</title></head>
@@ -46,9 +52,11 @@ export function transactionalEmail(
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f5f3f3"><tr><td align="center" style="padding:28px 12px">
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:620px;background:#ffffff;border:1px solid #ded8d8;border-radius:18px;overflow:hidden;box-shadow:0 14px 38px rgba(20,10,10,.10)">
 <tr><td style="height:6px;background:#c91f26;font-size:0">&nbsp;</td></tr>
-<tr><td style="padding:28px 34px 20px;background:#111111">
+<tr><td style="padding:24px 34px 20px;background:#111111">
+<table role="presentation" cellspacing="0" cellpadding="0"><tr>${logo}<td style="vertical-align:middle">
 <div style="color:#ffffff;font-family:Georgia,'Times New Roman',serif;font-size:25px;font-weight:700;letter-spacing:.2px">Mr. <span style="color:#ef3139">Livora</span></div>
 <div style="margin-top:6px;color:#d8d2d2;font-size:12px;letter-spacing:1.6px;text-transform:uppercase">Live in a Better Aura</div>
+</td></tr></table>
 </td></tr>
 <tr><td style="padding:34px">
 <div style="color:#c91f26;font-size:11px;font-weight:700;letter-spacing:1.8px;text-transform:uppercase">${escapeHtml(input.eyebrow)}</div>
@@ -66,6 +74,7 @@ export function transactionalEmail(
 export function smtpMailer(config: ReturnType<typeof loadConfig>): ResetMailer & {
   sendInvitation(email: string, link: string, societyName: string): Promise<void>;
 } & ResidentMailer {
+  const logoUrl = new URL('/assets/brand/logo.png', config.APP_ORIGIN).href;
   const transport = createTransport({
     host: config.SMTP_HOST,
     port: config.SMTP_PORT,
@@ -82,6 +91,7 @@ export function smtpMailer(config: ReturnType<typeof loadConfig>): ResetMailer &
   return {
     async verification(email, link) {
       const content = transactionalEmail({
+        logoUrl,
         preheader: 'Verify your email to finish creating your Mr. Livora account.',
         eyebrow: 'Email verification',
         title: 'Verify your email address',
@@ -106,6 +116,7 @@ export function smtpMailer(config: ReturnType<typeof loadConfig>): ResetMailer &
     },
     async existingAccount(email, link) {
       const content = transactionalEmail({
+        logoUrl,
         preheader: 'Your email is already linked to a Mr. Livora account.',
         eyebrow: 'Existing account',
         title: 'Continue with your existing account',
@@ -130,6 +141,7 @@ export function smtpMailer(config: ReturnType<typeof loadConfig>): ResetMailer &
     },
     async invitation(email, link, society) {
       const content = transactionalEmail({
+        logoUrl,
         preheader: `${society} invited you to join its resident workspace.`,
         eyebrow: 'Resident invitation',
         title: `You are invited to ${society}`,
@@ -155,6 +167,7 @@ export function smtpMailer(config: ReturnType<typeof loadConfig>): ResetMailer &
     },
     async sendInvitation(email, link, societyName) {
       const content = transactionalEmail({
+        logoUrl,
         preheader: `${societyName} invited you to help complete its community setup.`,
         eyebrow: 'Committee invitation',
         title: `Help set up ${societyName}`,
@@ -180,6 +193,7 @@ export function smtpMailer(config: ReturnType<typeof loadConfig>): ResetMailer &
     },
     async send(email, link) {
       const content = transactionalEmail({
+        logoUrl,
         preheader: 'Use this secure link to reset your Mr. Livora password.',
         eyebrow: 'Password assistance',
         title: 'Reset your password',

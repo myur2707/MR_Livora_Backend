@@ -490,6 +490,43 @@ export async function reportsIntegration(suite: TestContext, db: Connection): Pr
           reversals: '20.05',
           netRecorded: '80.25',
         });
+        // Chart series must reconcile with the report totals shown beside them.
+        const cents = (value: unknown) => Math.round(Number(value) * 100);
+        const records = (value: unknown): Record<string, unknown>[] => {
+          assert.ok(Array.isArray(value));
+          return value.map((item: unknown) => {
+            assert.ok(typeof item === 'object' && item !== null);
+            return item as Record<string, unknown>;
+          });
+        };
+        const trends = result.data['trends'];
+        assert.ok(typeof trends === 'object' && trends !== null);
+        assert.ok('periods' in trends && 'monthlyCollections' in trends);
+        const periods = records(trends.periods);
+        assert.ok(periods.length > 0 && periods.length <= 6);
+        for (const period of periods)
+          assert.equal(
+            cents(period['collected']) + cents(period['outstanding']),
+            cents(period['billed']),
+          );
+        const sum = (items: Record<string, unknown>[], key: string) =>
+          items.reduce((total, item) => total + cents(item[key]), 0);
+        assert.equal(sum(periods, 'billed'), cents('300.35'));
+        assert.equal(sum(periods, 'outstanding'), cents('190.00'));
+        const months = records(trends.monthlyCollections);
+        assert.equal(months.length, 6);
+        assert.deepEqual(
+          months.map((month) => month['month']),
+          [...months.map((month) => String(month['month']))].sort(),
+        );
+        assert.equal(months.at(-1)?.['netRecorded'], '110.35');
+        const statuses = records(result.data['complaintStatuses']);
+        assert.equal(
+          statuses
+            .filter((item) => ['NEW', 'ASSIGNED', 'IN_PROGRESS'].includes(String(item['status'])))
+            .reduce((total, item) => total + Number(item['total']), 0),
+          1,
+        );
         assert.ok(Array.isArray(result.data['recentNotices']));
         assert.equal(result.data['recentNotices'].length, 1);
         const firstNotice: unknown = result.data['recentNotices'][0];
@@ -500,6 +537,8 @@ export async function reportsIntegration(suite: TestContext, db: Connection): Pr
         const limited = await cm.request('/society/dashboard');
         assert.equal(limited.status, 200);
         assert.equal(limited.data['finance'], null);
+        // Committee members see the same society-level chart totals, but no report detail.
+        assert.deepEqual(limited.data['trends'], result.data['trends']);
       },
     );
     await suite.test(
@@ -522,6 +561,8 @@ export async function reportsIntegration(suite: TestContext, db: Connection): Pr
           'totalSocieties',
           'pendingVerification',
           'updatedAt',
+          'societiesByMonth',
+          'accounts',
         ]);
         const [counts] = await db.execute<RowDataPacket[]>(
           'SELECT COUNT(*) AS total FROM societies WHERE archived_at IS NULL',

@@ -24,6 +24,7 @@ const queryRoutes = [
   '/society/resident-invitations',
   '/society/registration-requests',
   '/platform/societies',
+  '/platform/societies/next-code',
 ];
 interface Context {
   token: string;

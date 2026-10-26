@@ -21,11 +21,28 @@ export class OnboardingService {
   async create(session: Session, input: CreateSociety, audit: RequestAudit) {
     return this.repository.database.transaction(async (db) => {
       const actor = await this.repository.platform(db, session);
-      const id = await insert(
-        db,
-        "INSERT INTO societies(code,name,timezone,status) VALUES(?,?,?,'DRAFT')",
-        [input.code, input.name, input.timezone],
-      );
+      let id: string;
+      try {
+        id = await insert(
+          db,
+          "INSERT INTO societies(code,name,timezone,status) VALUES(?,?,?,'DRAFT')",
+          [input.code, input.name, input.timezone],
+        );
+      } catch (error) {
+        // A specific code lets the client offer the next free code instead of a generic conflict.
+        if (
+          typeof error === 'object' &&
+          error !== null &&
+          'code' in error &&
+          error.code === 'ER_DUP_ENTRY'
+        )
+          throw new ApiError(
+            409,
+            'CODE_TAKEN',
+            'This code is already in use. Choose another code.',
+          );
+        throw error;
+      }
       await db.execute('INSERT INTO society_onboarding(society_id) VALUES(?)', [id]);
       for (const permission of permissions)
         await db.execute(
