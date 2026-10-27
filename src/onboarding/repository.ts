@@ -157,7 +157,7 @@ export class OnboardingRepository {
       `SELECT
    (SELECT COUNT(*) FROM buildings WHERE society_id=? AND archived_at IS NULL) AS buildings,
    (SELECT COUNT(*) FROM flats WHERE society_id=? AND archived_at IS NULL) AS flats,
-   (SELECT COUNT(*) FROM flat_occupancies WHERE society_id=?) AS residents,
+   (SELECT COUNT(*) FROM flat_occupancies o WHERE o.society_id=? AND NOT EXISTS (SELECT 1 FROM onboarding_archived_records a WHERE a.society_id=o.society_id AND a.entity_type='occupancy' AND a.entity_id=o.id)) AS residents,
    (SELECT COUNT(*) FROM maintenance_charge_configurations c JOIN maintenance_charge_types t ON t.society_id=c.society_id AND t.id=c.charge_type_id AND t.archived_at IS NULL WHERE c.society_id=?) AS maintenance,
    (SELECT COUNT(*) FROM buildings b WHERE b.society_id=? AND b.archived_at IS NULL AND NOT EXISTS(SELECT 1 FROM flats f WHERE f.society_id=b.society_id AND f.building_id=b.id AND f.archived_at IS NULL)) AS emptyBuildings,
    (SELECT COUNT(*) FROM flats WHERE society_id=? AND archived_at IS NULL AND area_sq_ft IS NULL) AS missingAreas,
@@ -231,6 +231,29 @@ export class OnboardingRepository {
         setup.society_id,
         audit.requestId,
         JSON.stringify({ fromStatus: from, toStatus: setup.status }),
+        sqlTime(this.clock()),
+      ],
+    );
+  }
+  async auditEntity(
+    db: PoolConnection,
+    setup: SetupRow,
+    actor: Actor,
+    action: string,
+    entityType: string,
+    entityId: string,
+    audit: RequestAudit,
+  ): Promise<void> {
+    await db.execute(
+      'INSERT INTO audit_logs(society_id,actor_user_id,action,entity_type,entity_id,request_id,safe_metadata,created_at) VALUES(?,?,?,?,?,?,?,?)',
+      [
+        setup.society_id,
+        actor.userId,
+        action,
+        entityType,
+        entityId,
+        audit.requestId,
+        JSON.stringify({ setupRevision: setup.revision }),
         sqlTime(this.clock()),
       ],
     );

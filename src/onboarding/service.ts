@@ -10,6 +10,9 @@ import type {
   RowHousesInput,
   ResidentInput,
   MaintenanceInput,
+  ResidentPageInput,
+  MaintenancePageInput,
+  StructureRecordInput,
   SocietyStatus,
 } from './contracts.js';
 import { parseStructureDetails } from './contracts.js';
@@ -366,7 +369,7 @@ export class OnboardingService {
       ];
       const items = await rows(
         db,
-        'SELECT f.id,b.name AS buildingName,b.code AS buildingCode,f.flat_number AS flatNumber,f.area_sq_ft AS areaSqFt FROM flats f JOIN buildings b ON b.society_id=f.society_id AND b.id=f.building_id WHERE f.society_id=? AND f.archived_at IS NULL AND b.archived_at IS NULL' +
+        'SELECT f.id,f.building_id AS buildingId,b.name AS buildingName,b.code AS buildingCode,f.flat_number AS flatNumber,f.area_sq_ft AS areaSqFt FROM flats f JOIN buildings b ON b.society_id=f.society_id AND b.id=f.building_id WHERE f.society_id=? AND f.archived_at IS NULL AND b.archived_at IS NULL' +
           typeFilter +
           searchFilter +
           ' ORDER BY b.id,f.id LIMIT ? OFFSET ?',
@@ -381,6 +384,101 @@ export class OnboardingService {
       );
       const total = Number(count[0]?.['total']);
       return { items, total, page, pageSize };
+    });
+  }
+  private async structureCorrection(db: PoolConnection, id: string, recordId: string) {
+    const found = await rows(
+      db,
+      'SELECT f.id,f.building_id AS buildingId,b.code AS buildingCode FROM flats f JOIN buildings b ON b.society_id=f.society_id AND b.id=f.building_id WHERE f.society_id=? AND f.id=? AND f.archived_at IS NULL AND b.archived_at IS NULL FOR UPDATE',
+      [id, recordId],
+    );
+    if (!found.length) throw notFound();
+    const dependencies = await rows(
+      db,
+      `SELECT o.flat_id FROM flat_occupancies o WHERE o.society_id=? AND o.flat_id=? AND NOT EXISTS (SELECT 1 FROM onboarding_archived_records a WHERE a.society_id=o.society_id AND a.entity_type='occupancy' AND a.entity_id=o.id)
+       UNION ALL SELECT flat_id FROM bills WHERE society_id=? AND flat_id=?
+       UNION ALL SELECT requested_flat_id FROM registration_requests WHERE society_id=? AND requested_flat_id=?
+       UNION ALL SELECT flat_id FROM invitations WHERE society_id=? AND flat_id=? LIMIT 1`,
+      [id, recordId, id, recordId, id, recordId, id, recordId],
+    );
+    if (dependencies.length)
+      throw new ApiError(
+        409,
+        'RECORD_HAS_DEPENDENCIES',
+        'This home already has resident, access, or financial activity and cannot be changed here.',
+      );
+    const buildingId: unknown = found[0]?.['buildingId'];
+    const buildingCode: unknown = found[0]?.['buildingCode'];
+    if (typeof buildingId !== 'string' || typeof buildingCode !== 'string') throw notFound();
+    return { buildingId, buildingCode };
+  }
+  async editStructure(
+    session: Session,
+    id: string,
+    recordId: string,
+    input: StructureRecordInput,
+    audit: RequestAudit,
+  ) {
+    await this.change(session, id, 'committee', input.revision, async (db, setup, actor) => {
+      assertEditable(setup.status);
+      const record = await this.structureCorrection(db, id, recordId);
+      await db.execute('UPDATE flats SET flat_number=?,area_sq_ft=? WHERE society_id=? AND id=?', [
+        input.flatNumber,
+        input.areaSqFt,
+        id,
+        recordId,
+      ]);
+      if (record.buildingCode !== 'ROW_HOUSES' && input.buildingCode && input.buildingName) {
+        await db.execute('UPDATE buildings SET code=?,name=? WHERE society_id=? AND id=?', [
+          input.buildingCode,
+          input.buildingName,
+          id,
+          record.buildingId,
+        ]);
+      }
+      await this.repository.advance(db, setup);
+      await this.repository.auditEntity(db, setup, actor, 'flat.updated', 'flat', recordId, audit);
+    });
+  }
+  async archiveStructure(
+    session: Session,
+    id: string,
+    recordId: string,
+    revision: string,
+    audit: RequestAudit,
+  ) {
+    await this.change(session, id, 'committee', revision, async (db, setup, actor) => {
+      assertEditable(setup.status);
+      const record = await this.structureCorrection(db, id, recordId);
+      const archivedAt = sqlTime(this.repository.clock());
+      await db.execute('UPDATE flats SET archived_at=? WHERE society_id=? AND id=?', [
+        archivedAt,
+        id,
+        recordId,
+      ]);
+      const activeHomes = await rows(
+        db,
+        'SELECT id FROM flats WHERE society_id=? AND building_id=? AND archived_at IS NULL LIMIT 1',
+        [id, record.buildingId],
+      );
+      if (!activeHomes.length) {
+        await db.execute('UPDATE buildings SET archived_at=? WHERE society_id=? AND id=?', [
+          archivedAt,
+          id,
+          record.buildingId,
+        ]);
+        await this.repository.auditEntity(
+          db,
+          setup,
+          actor,
+          'building.archived',
+          'building',
+          record.buildingId,
+          audit,
+        );
+      }
+      await this.repository.advance(db, setup);
+      await this.repository.auditEntity(db, setup, actor, 'flat.archived', 'flat', recordId, audit);
     });
   }
   async resident(session: Session, id: string, input: ResidentInput, audit: RequestAudit) {
@@ -416,20 +514,136 @@ export class OnboardingService {
       await this.repository.event(db, setup, actor, 'resident.created', audit);
     });
   }
-  async residents(session: Session, id: string, page: number) {
+  async residents(session: Session, id: string, query: ResidentPageInput) {
     return this.repository.database.transaction(async (db) => {
       await this.repository.access(db, session, id, 'committee');
+      const filters = [
+        'o.society_id=?',
+        "NOT EXISTS (SELECT 1 FROM onboarding_archived_records a WHERE a.society_id=o.society_id AND a.entity_type='occupancy' AND a.entity_id=o.id)",
+      ];
+      const values: string[] = [id];
+      if (query.search) {
+        const pattern =
+          '%' +
+          query.search.replaceAll('=', '==').replaceAll('%', '=%').replaceAll('_', '=_') +
+          '%';
+        filters.push("(p.display_name LIKE ? ESCAPE '=' OR f.flat_number LIKE ? ESCAPE '=')");
+        values.push(pattern, pattern);
+      }
+      if (query.occupancyType) {
+        filters.push('o.occupancy_type=?');
+        values.push(query.occupancyType);
+      }
+      const where = filters.join(' AND ');
       const data = await rows(
         db,
-        'SELECT o.id,p.display_name AS displayName,f.flat_number AS flatNumber,o.occupancy_type AS occupancyType,o.starts_on AS startsOn,o.ends_on AS endsOn FROM flat_occupancies o JOIN society_persons p ON p.society_id=o.society_id AND p.person_id=o.person_id JOIN flats f ON f.society_id=o.society_id AND f.id=o.flat_id WHERE o.society_id=? ORDER BY o.id DESC LIMIT 20 OFFSET ?',
-        [id, (page - 1) * 20],
+        'SELECT o.id,o.person_id AS personId,o.flat_id AS flatId,p.display_name AS displayName,b.code AS buildingCode,b.name AS buildingName,f.flat_number AS flatNumber,o.occupancy_type AS occupancyType,o.starts_on AS startsOn,o.ends_on AS endsOn FROM flat_occupancies o JOIN society_persons p ON p.society_id=o.society_id AND p.person_id=o.person_id JOIN flats f ON f.society_id=o.society_id AND f.id=o.flat_id JOIN buildings b ON b.society_id=f.society_id AND b.id=f.building_id WHERE ' +
+          where +
+          ' ORDER BY o.id DESC LIMIT 20 OFFSET ?',
+        [...values, (query.page - 1) * 20],
       );
       const total = await rows(
         db,
-        'SELECT COUNT(*) AS total FROM flat_occupancies WHERE society_id=?',
-        [id],
+        'SELECT COUNT(*) AS total FROM flat_occupancies o JOIN society_persons p ON p.society_id=o.society_id AND p.person_id=o.person_id JOIN flats f ON f.society_id=o.society_id AND f.id=o.flat_id WHERE ' +
+          where,
+        values,
       );
-      return { items: data, total: Number(total[0]?.['total']), page, pageSize: 20 };
+      return { items: data, total: Number(total[0]?.['total']), page: query.page, pageSize: 20 };
+    });
+  }
+  private async assertResidentCorrectionAllowed(db: PoolConnection, id: string, recordId: string) {
+    const found = await rows(
+      db,
+      "SELECT o.person_id FROM flat_occupancies o WHERE o.society_id=? AND o.id=? AND NOT EXISTS (SELECT 1 FROM onboarding_archived_records a WHERE a.society_id=o.society_id AND a.entity_type='occupancy' AND a.entity_id=o.id) FOR UPDATE",
+      [id, recordId],
+    );
+    const personId: unknown = found[0]?.['person_id'];
+    if (typeof personId !== 'string') throw notFound();
+    const dependencies = await rows(
+      db,
+      `SELECT person_id FROM membership_person_links WHERE society_id=? AND person_id=?
+       UNION ALL SELECT person_id FROM invitations WHERE society_id=? AND person_id=?
+       UNION ALL SELECT payer_person_id FROM payments WHERE society_id=? AND payer_person_id=? LIMIT 1`,
+      [id, personId, id, personId, id, personId],
+    );
+    if (dependencies.length)
+      throw new ApiError(
+        409,
+        'RECORD_HAS_DEPENDENCIES',
+        'This resident is already linked to access or financial activity and cannot be changed here.',
+      );
+    return personId;
+  }
+  async editResident(
+    session: Session,
+    id: string,
+    recordId: string,
+    input: ResidentInput,
+    audit: RequestAudit,
+  ) {
+    await this.change(session, id, 'committee', input.revision, async (db, setup, actor) => {
+      assertEditable(setup.status);
+      const personId = await this.assertResidentCorrectionAllowed(db, id, recordId);
+      const target = await rows(
+        db,
+        'SELECT f.id FROM flats f JOIN buildings b ON b.society_id=f.society_id AND b.id=f.building_id WHERE f.society_id=? AND f.id=? AND f.archived_at IS NULL AND b.archived_at IS NULL' +
+          (input.propertyType ? ' AND (b.code=?)=?' : '') +
+          ' FOR SHARE',
+        input.propertyType
+          ? [id, input.flatId, 'ROW_HOUSES', input.propertyType === 'ROW_HOUSE' ? 1 : 0]
+          : [id, input.flatId],
+      );
+      if (!target.length) throw notFound();
+      await db.execute(
+        'UPDATE society_persons SET display_name=? WHERE society_id=? AND person_id=?',
+        [input.displayName, id, personId],
+      );
+      await db.execute(
+        'UPDATE flat_occupancies SET flat_id=?,occupancy_type=?,starts_on=?,ends_on=? WHERE society_id=? AND id=?',
+        [input.flatId, input.occupancyType, input.startsOn, input.endsOn, id, recordId],
+      );
+      await db.execute('UPDATE society_onboarding SET residents_confirmed=0 WHERE society_id=?', [
+        id,
+      ]);
+      await this.repository.advance(db, setup);
+      await this.repository.auditEntity(
+        db,
+        setup,
+        actor,
+        'occupancy.updated',
+        'occupancy',
+        recordId,
+        audit,
+      );
+    });
+  }
+  async archiveResident(
+    session: Session,
+    id: string,
+    recordId: string,
+    revision: string,
+    audit: RequestAudit,
+  ) {
+    await this.change(session, id, 'committee', revision, async (db, setup, actor) => {
+      assertEditable(setup.status);
+      await this.assertResidentCorrectionAllowed(db, id, recordId);
+      await db.execute(
+        "INSERT INTO onboarding_archived_records(society_id,entity_type,entity_id,archived_at) VALUES(?,'occupancy',?,?)",
+        [id, recordId, sqlTime(this.repository.clock())],
+      );
+      await db.execute('UPDATE society_onboarding SET residents_confirmed=0 WHERE society_id=?', [
+        id,
+      ]);
+      await this.repository.advance(db, setup);
+      await this.repository.auditEntity(
+        db,
+        setup,
+        actor,
+        'occupancy.archived',
+        'occupancy',
+        recordId,
+        audit,
+      );
     });
   }
   async maintenance(session: Session, id: string, input: MaintenanceInput, audit: RequestAudit) {
@@ -451,16 +665,126 @@ export class OnboardingService {
       await this.repository.event(db, setup, actor, 'maintenance.created', audit);
     });
   }
-  async configurations(session: Session, id: string, page: number) {
+  async configurations(session: Session, id: string, query: MaintenancePageInput) {
     return this.repository.database.transaction(async (db) => {
       await this.repository.access(db, session, id, 'committee');
+      const filters = ['c.society_id=?', 't.archived_at IS NULL'];
+      const values: string[] = [id];
+      if (query.search) {
+        const pattern =
+          '%' +
+          query.search.replaceAll('=', '==').replaceAll('%', '=%').replaceAll('_', '=_') +
+          '%';
+        filters.push("(t.code LIKE ? ESCAPE '=' OR t.name LIKE ? ESCAPE '=')");
+        values.push(pattern, pattern);
+      }
+      if (query.method) {
+        filters.push('c.calculation_method=?');
+        values.push(query.method);
+      }
+      const where = filters.join(' AND ');
       const items = await rows(
         db,
-        'SELECT c.id,t.name,c.calculation_method AS method,c.rate,c.effective_from AS effectiveFrom FROM maintenance_charge_configurations c JOIN maintenance_charge_types t ON t.society_id=c.society_id AND t.id=c.charge_type_id WHERE c.society_id=? AND t.archived_at IS NULL ORDER BY c.id DESC LIMIT 20 OFFSET ?',
-        [id, (page - 1) * 20],
+        'SELECT c.id,t.id AS chargeTypeId,t.code,t.name,c.calculation_method AS method,c.rate,c.effective_from AS effectiveFrom FROM maintenance_charge_configurations c JOIN maintenance_charge_types t ON t.society_id=c.society_id AND t.id=c.charge_type_id WHERE ' +
+          where +
+          ' ORDER BY c.id DESC LIMIT 20 OFFSET ?',
+        [...values, (query.page - 1) * 20],
       );
-      const total = Number((await this.repository.counts(db, id)).maintenance);
-      return { items, total, page, pageSize: 20 };
+      const count = await rows(
+        db,
+        'SELECT COUNT(*) AS total FROM maintenance_charge_configurations c JOIN maintenance_charge_types t ON t.society_id=c.society_id AND t.id=c.charge_type_id WHERE ' +
+          where,
+        values,
+      );
+      return { items, total: Number(count[0]?.['total']), page: query.page, pageSize: 20 };
+    });
+  }
+  private async maintenanceCorrection(
+    db: PoolConnection,
+    id: string,
+    recordId: string,
+  ): Promise<{ chargeTypeId: string }> {
+    const found = await rows(
+      db,
+      'SELECT c.charge_type_id AS chargeTypeId FROM maintenance_charge_configurations c JOIN maintenance_charge_types t ON t.society_id=c.society_id AND t.id=c.charge_type_id WHERE c.society_id=? AND c.id=? AND t.archived_at IS NULL FOR UPDATE',
+      [id, recordId],
+    );
+    const chargeTypeId: unknown = found[0]?.['chargeTypeId'];
+    if (typeof chargeTypeId !== 'string') throw notFound();
+    const dependencies = await rows(
+      db,
+      `SELECT charge_configuration_id FROM bill_items WHERE society_id=? AND charge_configuration_id=?
+       UNION ALL SELECT configuration_id FROM maintenance_configuration_details WHERE society_id=? AND configuration_id=? LIMIT 1`,
+      [id, recordId, id, recordId],
+    );
+    if (dependencies.length)
+      throw new ApiError(
+        409,
+        'RECORD_HAS_DEPENDENCIES',
+        'This charge is already used by billing and cannot be changed here.',
+      );
+    return { chargeTypeId };
+  }
+  async editMaintenance(
+    session: Session,
+    id: string,
+    recordId: string,
+    input: MaintenanceInput,
+    audit: RequestAudit,
+  ) {
+    await this.change(session, id, 'committee', input.revision, async (db, setup, actor) => {
+      assertEditable(setup.status);
+      const record = await this.maintenanceCorrection(db, id, recordId);
+      await db.execute(
+        'UPDATE maintenance_charge_types SET code=?,name=? WHERE society_id=? AND id=?',
+        [input.code, input.name, id, record.chargeTypeId],
+      );
+      await db.execute(
+        'UPDATE maintenance_charge_configurations SET calculation_method=?,rate=?,effective_from=? WHERE society_id=? AND id=?',
+        [input.method, input.rate, input.effectiveFrom, id, recordId],
+      );
+      await db.execute('UPDATE society_onboarding SET maintenance_confirmed=0 WHERE society_id=?', [
+        id,
+      ]);
+      await this.repository.advance(db, setup);
+      await this.repository.auditEntity(
+        db,
+        setup,
+        actor,
+        'maintenance_configuration.updated',
+        'maintenance_charge_configuration',
+        recordId,
+        audit,
+      );
+    });
+  }
+  async archiveMaintenance(
+    session: Session,
+    id: string,
+    recordId: string,
+    revision: string,
+    audit: RequestAudit,
+  ) {
+    await this.change(session, id, 'committee', revision, async (db, setup, actor) => {
+      assertEditable(setup.status);
+      const record = await this.maintenanceCorrection(db, id, recordId);
+      await db.execute(
+        'UPDATE maintenance_charge_types SET archived_at=? WHERE society_id=? AND id=?',
+        [sqlTime(this.repository.clock()), id, record.chargeTypeId],
+      );
+      await db.execute('UPDATE society_onboarding SET maintenance_confirmed=0 WHERE society_id=?', [
+        id,
+      ]);
+      await this.repository.advance(db, setup);
+      await this.repository.auditEntity(
+        db,
+        setup,
+        actor,
+        'maintenance_configuration.archived',
+        'maintenance_charge_configuration',
+        recordId,
+        audit,
+      );
     });
   }
   async confirm(

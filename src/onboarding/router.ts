@@ -19,6 +19,9 @@ import {
   rowHousesSchema,
   residentSchema,
   maintenanceSchema,
+  maintenancePageSchema,
+  archiveSetupRecordSchema,
+  structureRecordSchema,
   confirmationSchema,
   acceptSchema,
   inspectSchema,
@@ -114,6 +117,33 @@ export function onboardingRouter(
       );
       s.status(201).json(result);
     });
+    if (scope === 'committee') {
+      router.put(prefix + '/structure/:recordId', security.csrf, ...guards, async (r, s) => {
+        await onboarding.editStructure(
+          session(r),
+          id(r),
+          parse(identifier, r.params['recordId']),
+          parse(structureRecordSchema, r.body),
+          audit(r, s),
+        );
+        s.sendStatus(204);
+      });
+      router.post(
+        prefix + '/structure/:recordId/archive',
+        security.csrf,
+        ...guards,
+        async (r, s) => {
+          await onboarding.archiveStructure(
+            session(r),
+            id(r),
+            parse(identifier, r.params['recordId']),
+            parse(archiveSetupRecordSchema, r.body).revision,
+            audit(r, s),
+          );
+          s.sendStatus(204);
+        },
+      );
+    }
   }
   router.post(
     '/platform/societies/:id/status',
@@ -169,7 +199,7 @@ export function onboardingRouter(
   });
   router.get('/onboarding/societies/:id/residents', security.authenticated, async (r, s) => {
     const page = parse(residentPageSchema, r.query);
-    s.json(await onboarding.residents(session(r), id(r), page.page));
+    s.json(await onboarding.residents(session(r), id(r), page));
   });
   router.post(
     '/onboarding/societies/:id/residents',
@@ -180,10 +210,70 @@ export function onboardingRouter(
       s.status(201).end();
     },
   );
+  router.put(
+    '/onboarding/societies/:id/residents/:recordId',
+    security.csrf,
+    security.authenticated,
+    async (r, s) => {
+      await onboarding.editResident(
+        session(r),
+        id(r),
+        parse(identifier, r.params['recordId']),
+        parse(residentSchema, r.body),
+        audit(r, s),
+      );
+      s.sendStatus(204);
+    },
+  );
+  router.post(
+    '/onboarding/societies/:id/residents/:recordId/archive',
+    security.csrf,
+    security.authenticated,
+    async (r, s) => {
+      await onboarding.archiveResident(
+        session(r),
+        id(r),
+        parse(identifier, r.params['recordId']),
+        parse(archiveSetupRecordSchema, r.body).revision,
+        audit(r, s),
+      );
+      s.sendStatus(204);
+    },
+  );
   router.get('/onboarding/societies/:id/maintenance', security.authenticated, async (r, s) =>
     s.json(
-      await onboarding.configurations(session(r), id(r), parse(residentPageSchema, r.query).page),
+      await onboarding.configurations(session(r), id(r), parse(maintenancePageSchema, r.query)),
     ),
+  );
+  router.put(
+    '/onboarding/societies/:id/maintenance/:recordId',
+    security.csrf,
+    security.authenticated,
+    async (r, s) => {
+      await onboarding.editMaintenance(
+        session(r),
+        id(r),
+        parse(identifier, r.params['recordId']),
+        parse(maintenanceSchema, r.body),
+        audit(r, s),
+      );
+      s.sendStatus(204);
+    },
+  );
+  router.post(
+    '/onboarding/societies/:id/maintenance/:recordId/archive',
+    security.csrf,
+    security.authenticated,
+    async (r, s) => {
+      await onboarding.archiveMaintenance(
+        session(r),
+        id(r),
+        parse(identifier, r.params['recordId']),
+        parse(archiveSetupRecordSchema, r.body).revision,
+        audit(r, s),
+      );
+      s.sendStatus(204);
+    },
   );
   router.post(
     '/onboarding/societies/:id/maintenance',

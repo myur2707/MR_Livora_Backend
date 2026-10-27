@@ -116,6 +116,20 @@ export const maintenanceSchema = z.strictObject({
   rate: money,
   effectiveFrom: date,
 });
+export const archiveSetupRecordSchema = z.strictObject(revision);
+export const structureRecordSchema = z.strictObject({
+  ...revision,
+  flatNumber: text(32),
+  areaSqFt: z
+    .string()
+    .regex(/^[1-9]\d{0,7}\.\d{2}$/)
+    .nullable(),
+  buildingCode: z
+    .string()
+    .regex(/^[A-Z0-9][A-Z0-9_-]{0,63}$/)
+    .optional(),
+  buildingName: text(100).optional(),
+});
 export const confirmationSchema = z.strictObject({ ...revision, confirmed: z.literal(true) });
 export const acceptSchema = z.strictObject({
   token: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
@@ -124,6 +138,13 @@ export const acceptSchema = z.strictObject({
 export const inspectSchema = acceptSchema.omit({ password: true });
 export const residentPageSchema = z.strictObject({
   page: z.coerce.number().int().min(1).max(10000).default(1),
+  search: z.string().trim().max(80).optional(),
+  occupancyType: z.enum(['OWNER', 'TENANT', 'FAMILY_MEMBER', 'AUTHORIZED_OCCUPANT']).optional(),
+});
+export const maintenancePageSchema = z.strictObject({
+  page: z.coerce.number().int().min(1).max(10000).default(1),
+  search: z.string().trim().max(80).optional(),
+  method: z.enum(['FLAT_RATE', 'PER_SQ_FT']).optional(),
 });
 export const structurePageSchema = residentPageSchema.extend({
   propertyType: z.enum(['FLAT', 'ROW_HOUSE']).optional(),
@@ -191,6 +212,9 @@ export type BuildingInput = z.infer<typeof buildingSchema>;
 export type RowHousesInput = z.infer<typeof rowHousesSchema>;
 export type ResidentInput = z.infer<typeof residentSchema>;
 export type MaintenanceInput = z.infer<typeof maintenanceSchema>;
+export type StructureRecordInput = z.infer<typeof structureRecordSchema>;
+export type ResidentPageInput = z.infer<typeof residentPageSchema>;
+export type MaintenancePageInput = z.infer<typeof maintenancePageSchema>;
 export type PageInput = z.infer<typeof pageSchema>;
 
 export type BuildingBatchInput = z.infer<typeof buildingBatchSchema>;

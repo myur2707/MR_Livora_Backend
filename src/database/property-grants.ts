@@ -32,7 +32,12 @@ export async function grantPropertyRuntime(
       '.society_persons TO ?@?',
     [user, host],
   );
-  await db.query('GRANT UPDATE(ends_on) ON ' + schema + '.flat_occupancies TO ?@?', [user, host]);
+  await db.query(
+    'GRANT UPDATE(flat_id,occupancy_type,starts_on,ends_on) ON ' +
+      schema +
+      '.flat_occupancies TO ?@?',
+    [user, host],
+  );
   await db.query(
     'GRANT UPDATE(status,validation_hash,error_rows,warning_rows,confirmed_at,result_summary) ON ' +
       schema +
