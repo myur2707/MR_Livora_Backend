@@ -38,6 +38,16 @@ void test('transactional email includes branded HTML, plain text and escaped dyn
   assert.doesNotMatch(email.html, /Join <Unsafe>/);
   assert.match(email.text, /Join <Unsafe> Community/);
   assert.match(email.text, /© 2026 Mr\. Livora\. All rights reserved\./);
+  // Every email tells the recipient how to reach support.
+  assert.match(email.html, /href="tel:\+919157379787"[^>]*>\+91 9157379787</);
+  assert.match(
+    email.html,
+    /href="mailto:mrlivora\.official@gmail\.com"[^>]*>mrlivora\.official@gmail\.com</,
+  );
+  assert.match(
+    email.text,
+    /call or WhatsApp us at \+91 9157379787 or email mrlivora\.official@gmail\.com/,
+  );
 });
 
 void test('transactional email without a logo keeps a text-only header', () => {

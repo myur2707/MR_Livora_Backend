@@ -3,7 +3,7 @@ import type { RuntimeDatabase } from '../database/runtime.js';
 import type { Session, RequestAudit } from '../auth/types.js';
 import { sqlTime } from '../auth/repository.js';
 import { ApiError } from '../http/errors.js';
-import type { SocietyStatus, PageInput, CommunityType } from './contracts.js';
+import type { SocietyStatus, PageInput, CommunityType, StructureDetails } from './contracts.js';
 import { communityCode } from './contracts.js';
 import type { Requirements } from './policy.js';
 import { recentMonths } from '../reports/dates.js';
@@ -27,6 +27,8 @@ export interface Actor {
   userId: string;
   membershipId: string | null;
 }
+/** Row houses are stored as flats of one reserved building that users never see as a wing. */
+export const rowHouseBuildingCode = 'ROW_HOUSES';
 export interface CountRow extends RowDataPacket {
   buildings: number;
   flats: number;
@@ -36,6 +38,22 @@ export interface CountRow extends RowDataPacket {
   missingAreas: number;
   committee: number;
   perArea: number;
+  rowHouses: number;
+  rowHouseBuildings: number;
+}
+/**
+ * Counts shown to people: the reserved row-house building is not a building, and its row
+ * houses are not flats. Setup requirements keep using the raw totals.
+ */
+export function displayCounts(c: CountRow) {
+  const rowHouses = Number(c.rowHouses);
+  return {
+    buildings: Number(c.buildings) - Number(c.rowHouseBuildings),
+    flats: Number(c.flats) - rowHouses,
+    rowHouses,
+    residents: Number(c.residents),
+    maintenance: Number(c.maintenance),
+  };
 }
 type Values = (string | number | Buffer | null)[];
 export async function rows<T extends RowDataPacket>(
@@ -151,8 +169,10 @@ export class OnboardingRepository {
      JOIN roles r ON r.society_id=mr.society_id AND r.id=mr.role_id AND r.code='COMMITTEE_ADMIN' AND r.archived_at IS NULL
      JOIN role_permissions rp ON rp.society_id=r.society_id AND rp.role_id=r.id JOIN permissions p ON p.id=rp.permission_id AND p.code='society.members.manage'
      WHERE i.society_id=? AND i.status='ACCEPTED') AS committee,
-   (SELECT COUNT(*) FROM maintenance_charge_configurations c JOIN maintenance_charge_types t ON t.society_id=c.society_id AND t.id=c.charge_type_id AND t.archived_at IS NULL WHERE c.society_id=? AND c.calculation_method='PER_SQ_FT') AS perArea`,
-      Array<string>(8).fill(societyId),
+   (SELECT COUNT(*) FROM maintenance_charge_configurations c JOIN maintenance_charge_types t ON t.society_id=c.society_id AND t.id=c.charge_type_id AND t.archived_at IS NULL WHERE c.society_id=? AND c.calculation_method='PER_SQ_FT') AS perArea,
+   (SELECT COUNT(*) FROM flats f JOIN buildings b ON b.society_id=f.society_id AND b.id=f.building_id AND b.archived_at IS NULL WHERE f.society_id=? AND f.archived_at IS NULL AND b.code=?) AS rowHouses,
+   (SELECT COUNT(*) FROM buildings WHERE society_id=? AND archived_at IS NULL AND code=?) AS rowHouseBuildings`,
+      [...Array<string>(9).fill(societyId), rowHouseBuildingCode, societyId, rowHouseBuildingCode],
     );
     const value = result[0];
     if (!value) throw notFound();
@@ -183,8 +203,9 @@ export class OnboardingRepository {
     action: string,
     audit: RequestAudit,
     from: SocietyStatus | null = setup.status,
+    details: StructureDetails | null = null,
   ): Promise<void> {
-    await db.execute(
+    const [event] = await db.execute<ResultSetHeader>(
       'INSERT INTO society_onboarding_events(society_id,actor_user_id,action,from_status,to_status,revision,request_id,created_at) SELECT society_id,?,?,?, ?,revision,?,? FROM society_onboarding WHERE society_id=?',
       [
         actor.userId,
@@ -196,6 +217,11 @@ export class OnboardingRepository {
         setup.society_id,
       ],
     );
+    if (details)
+      await db.execute(
+        'INSERT INTO society_onboarding_event_details(society_id,event_id,details) VALUES(?,?,?)',
+        [setup.society_id, String(event.insertId), JSON.stringify(details)],
+      );
     await db.execute(
       "INSERT INTO audit_logs(society_id,actor_user_id,action,entity_type,entity_id,request_id,safe_metadata,created_at) VALUES(?,?,?,'society',?,?,?,?)",
       [
@@ -232,6 +258,11 @@ export class OnboardingRepository {
       if (page.status) {
         filters.push('s.status=?');
         values.push(page.status);
+      }
+      if (page.type) {
+        // Allowlisted prefix; older free-form codes have no type and match no type filter.
+        filters.push('s.code LIKE ?');
+        values.push(page.type + '-%');
       }
       if (page.search) {
         filters.push("(s.name LIKE ? ESCAPE '=' OR s.code LIKE ? ESCAPE '=')");

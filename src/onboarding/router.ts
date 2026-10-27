@@ -7,6 +7,7 @@ import {
   parse,
   identifier,
   createSocietySchema,
+  auditTrailSchema,
   nextCodeSchema,
   pageSchema,
   residentPageSchema,
@@ -22,6 +23,7 @@ import {
   acceptSchema,
   inspectSchema,
 } from './contracts.js';
+import { PlatformAuditTrail } from './audit-trail.js';
 export function onboardingRouter(
   security: Security,
   onboarding: OnboardingService,
@@ -37,6 +39,11 @@ export function onboardingRouter(
   );
   router.get('/platform/societies', security.authenticated, security.platform, async (r, s) =>
     s.json(await onboarding.repository.list(session(r), parse(pageSchema, r.query))),
+  );
+  // Platform-wide audit trail (who/what/when only); platform admins exclusively.
+  const auditTrail = new PlatformAuditTrail(onboarding.repository);
+  router.get('/platform/audit-trail', security.authenticated, security.platform, async (r, s) =>
+    s.json(await auditTrail.list(session(r), parse(auditTrailSchema, r.query))),
   );
   // Registered before /platform/societies/:id so "next-code" is never read as an identifier.
   router.get(
@@ -73,38 +80,39 @@ export function onboardingRouter(
           query.page,
           query.propertyType,
           query.search,
+          query.pageSize,
         ),
       );
     });
     router.post(prefix + '/buildings/batch', security.csrf, ...guards, async (r, s) => {
-      await onboarding.buildingBatch(
+      const result = await onboarding.buildingBatch(
         session(r),
         id(r),
         scope,
         parse(buildingBatchSchema, r.body),
         audit(r, s),
       );
-      s.status(201).end();
+      s.status(201).json(result);
     });
     router.post(prefix + '/row-houses', security.csrf, ...guards, async (r, s) => {
-      await onboarding.rowHouses(
+      const result = await onboarding.rowHouses(
         session(r),
         id(r),
         scope,
         parse(rowHousesSchema, r.body),
         audit(r, s),
       );
-      s.status(201).end();
+      s.status(201).json(result);
     });
     router.post(prefix + '/buildings', security.csrf, ...guards, async (r, s) => {
-      await onboarding.building(
+      const result = await onboarding.building(
         session(r),
         id(r),
         scope,
         parse(buildingSchema, r.body),
         audit(r, s),
       );
-      s.status(201).end();
+      s.status(201).json(result);
     });
   }
   router.post(

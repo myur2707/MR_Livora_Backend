@@ -128,13 +128,53 @@ export const residentPageSchema = z.strictObject({
 export const structurePageSchema = residentPageSchema.extend({
   propertyType: z.enum(['FLAT', 'ROW_HOUSE']).optional(),
   search: z.string().trim().max(80).optional(),
+  // The resident picker loads 50 at a time; the setup table asks for smaller pages.
+  pageSize: z.coerce.number().int().min(1).max(50).default(50),
 });
+/** Code prefixes for new communities: Society, Flat, Township. The type lives only in the code. */
+export const communityTypes = ['SOC', 'FLT', 'TWP'] as const;
+export type CommunityType = (typeof communityTypes)[number];
 export const pageSchema = z.strictObject({
   page: z.coerce.number().int().min(1).max(10000).default(1),
   pageSize: z.coerce.number().int().min(1).max(50).default(20),
   status: z.enum(statuses).optional(),
+  type: z.enum(communityTypes).optional(),
   search: text(80).optional(),
 });
+/** Audit trail modules and the audited record types each covers; unknown types read as "other". */
+export const auditModules = {
+  society_setup: ['society'],
+  property: ['building', 'flat', 'person', 'occupancy', 'import'],
+  resident_access: ['registration_request', 'invitation'],
+  billing: [
+    'bill',
+    'billing_period',
+    'billing_generation_run',
+    'maintenance_charge_type',
+    'maintenance_charge_configuration',
+  ],
+  payments: ['payment'],
+  community: ['notice', 'complaint'],
+  reports: ['report'],
+} as const;
+export type AuditModule = keyof typeof auditModules;
+export const auditTrailSchema = z
+  .strictObject({
+    page: z.coerce.number().int().min(1).max(10000).default(1),
+    pageSize: z.coerce.number().int().min(1).max(50).default(25),
+    societyId: identifier.optional(),
+    module: z.enum(Object.keys(auditModules) as [AuditModule, ...AuditModule[]]).optional(),
+    from: date.optional(),
+    to: date.optional(),
+    search: text(80).optional(),
+  })
+  .refine((v) => !v.from || !v.to || v.from <= v.to, { message: 'From must not be after to.' });
+export type AuditTrailQuery = z.infer<typeof auditTrailSchema>;
+export function auditModuleOf(entityType: string): AuditModule | 'other' {
+  for (const [module, types] of Object.entries(auditModules) as [AuditModule, readonly string[]][])
+    if (types.includes(entityType)) return module;
+  return 'other';
+}
 export function parse<T>(schema: z.ZodType<T>, value: unknown): T {
   const result = schema.safeParse(value);
   if (!result.success)
@@ -142,9 +182,6 @@ export function parse<T>(schema: z.ZodType<T>, value: unknown): T {
   return result.data;
 }
 export type CreateSociety = z.infer<typeof createSocietySchema>;
-/** Code prefixes for new communities: Society, Flat, Township. The type lives only in the code. */
-export const communityTypes = ['SOC', 'FLT', 'TWP'] as const;
-export type CommunityType = (typeof communityTypes)[number];
 export const nextCodeSchema = z.strictObject({ type: z.enum(communityTypes) });
 /** SOC-00001 … SOC-99999, then SOC-100000: five digits minimum, growing as needed. */
 export function communityCode(type: CommunityType, sequence: number): string {
@@ -157,3 +194,33 @@ export type MaintenanceInput = z.infer<typeof maintenanceSchema>;
 export type PageInput = z.infer<typeof pageSchema>;
 
 export type BuildingBatchInput = z.infer<typeof buildingBatchSchema>;
+
+/**
+ * Structure facts recorded with a setup event: wing codes and flat or row house numbers only.
+ * Parsed on read as well as typed on write, so nothing else stored can reach a client.
+ */
+const numbers = z.array(z.string().max(64)).max(500);
+const wingDetail = z.object({
+  code: z.string().max(64),
+  existing: z.boolean(),
+  added: numbers,
+  skipped: numbers,
+});
+export const structureDetailsSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('wings'), wings: z.array(wingDetail).max(10) }),
+  z.object({ kind: z.literal('row_houses'), added: numbers, skipped: numbers }),
+]);
+export type StructureDetails = z.infer<typeof structureDetailsSchema>;
+/** Stored details that fail to parse are dropped rather than shown. */
+export function parseStructureDetails(value: unknown): StructureDetails | null {
+  const raw: unknown = typeof value === 'string' ? safeJson(value) : value;
+  const parsed = structureDetailsSchema.safeParse(raw);
+  return parsed.success ? parsed.data : null;
+}
+function safeJson(value: string): unknown {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}

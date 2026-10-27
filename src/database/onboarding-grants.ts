@@ -35,9 +35,14 @@ export async function grantOnboardingRuntime(
       user,
       host,
     ]);
-  await db.query('GRANT SELECT,INSERT ON ' + schema + '.society_onboarding_events TO ?@?', [
-    user,
-    host,
-  ]);
+  for (const table of ['society_onboarding_events', 'society_onboarding_event_details'])
+    await db.query('GRANT SELECT,INSERT ON ' + schema + '.' + table + ' TO ?@?', [user, host]);
   await db.query('GRANT INSERT ON ' + schema + '.audit_logs TO ?@?', [user, host]);
+  // Platform audit trail reads who/what/when columns only; safe_metadata stays unreadable.
+  await db.query(
+    'GRANT SELECT(id,society_id,actor_user_id,action,entity_type,entity_id,request_id,created_at) ON ' +
+      schema +
+      '.audit_logs TO ?@?',
+    [user, host],
+  );
 }

@@ -1,8 +1,17 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { ResetQueue } from '../src/auth/reset-queue.js';
-import { assertTransition, assertComplete } from '../src/onboarding/policy.js';
+import {
+  assertTransition,
+  assertComplete,
+  assertSomethingAdded,
+  archivedWingMessage,
+  nothingToAddMessage,
+  numberKey,
+} from '../src/onboarding/policy.js';
 import { ApiError } from '../src/http/errors.js';
+import { displayCounts } from '../src/onboarding/repository.js';
+import type { CountRow } from '../src/onboarding/repository.js';
 import {
   identifier,
   parse,
@@ -16,6 +25,9 @@ import {
   pageSchema,
   communityCode,
   nextCodeSchema,
+  auditModuleOf,
+  auditTrailSchema,
+  parseStructureDetails,
 } from '../src/onboarding/contracts.js';
 void test('resident property choices and structure filters reject unsupported types and scope overrides', () => {
   for (const propertyType of ['FLAT', 'ROW_HOUSE']) {
@@ -40,6 +52,87 @@ void test('resident property choices and structure filters reject unsupported ty
     '101',
   );
   assert.throws(() => parse(structurePageSchema, { search: 'x'.repeat(81) }));
+  assert.equal(parse(structurePageSchema, {}).pageSize, 50);
+  assert.equal(parse(structurePageSchema, { pageSize: '10' }).pageSize, 10);
+  for (const pageSize of ['0', '51', '2.5', 'ten'])
+    assert.throws(() => parse(structurePageSchema, { pageSize }));
+});
+void test('existing numbers are skipped, and a save with nothing new is refused with the numbers', () => {
+  assert.equal(numberKey('101A'), numberKey('101a'));
+  const wing = (code: string, added: string[], skipped: string[]) => ({
+    code,
+    existing: true,
+    added,
+    skipped,
+  });
+  assert.doesNotThrow(() => assertSomethingAdded([wing('A', ['106'], ['101'])]));
+  assert.doesNotThrow(() => assertSomethingAdded([wing('A', [], ['101']), wing('B', ['101'], [])]));
+  assert.throws(
+    () => assertSomethingAdded([wing('A', [], ['101', '102', '103'])]),
+    (error: unknown) =>
+      error instanceof ApiError &&
+      error.status === 409 &&
+      error.code === 'NOTHING_TO_ADD' &&
+      error.message ===
+        'All of these flats already exist in wing A (101, 102 and 103). Nothing new to save. Enter numbers that are not added yet.',
+  );
+  assert.throws(
+    () => assertSomethingAdded([wing('A', [], ['101']), wing('B', [], ['101'])]),
+    (error: unknown) =>
+      error instanceof ApiError && /selected wings already exists/.test(error.message),
+  );
+  const many = Array.from({ length: 12 }, (_, n) => String(n + 1));
+  assert.equal(
+    nothingToAddMessage(null, many),
+    'All of these row houses already exist (1, 2, 3, 4, 5, 6, 7, 8, 9, 10 and 2 more). Nothing new to save. Enter numbers that are not added yet.',
+  );
+  assert.match(nothingToAddMessage(null, ['5']), /^This row house already exists \(5\)\./);
+  assert.match(archivedWingMessage('C'), /^Wing C was archived/);
+});
+void test('stored setup details are re-validated and anything unexpected is dropped', () => {
+  const wings = {
+    kind: 'wings',
+    wings: [{ code: 'A', existing: true, added: ['106'], skipped: ['101'] }],
+  };
+  assert.deepEqual(parseStructureDetails(wings), wings);
+  assert.deepEqual(parseStructureDetails(JSON.stringify(wings)), wings);
+  assert.deepEqual(parseStructureDetails({ kind: 'row_houses', added: ['1'], skipped: [] }), {
+    kind: 'row_houses',
+    added: ['1'],
+    skipped: [],
+  });
+  // Unknown keys are stripped, so only structure facts can ever reach a client.
+  assert.deepEqual(parseStructureDetails({ ...wings, phone: '99999' }), wings);
+  for (const bad of [null, '{', 'x', { kind: 'payments', amount: '10.00' }, { kind: 'wings' }])
+    assert.equal(parseStructureDetails(bad), null);
+});
+void test('displayed counts separate row houses from buildings and flats', () => {
+  const raw = {
+    buildings: 3,
+    flats: 70,
+    rowHouses: 50,
+    rowHouseBuildings: 1,
+    residents: 4,
+    maintenance: 1,
+  } as CountRow;
+  assert.deepEqual(displayCounts(raw), {
+    buildings: 2,
+    flats: 20,
+    rowHouses: 50,
+    residents: 4,
+    maintenance: 1,
+  });
+  // MySQL COUNT(*) may arrive as strings; an archived-out row-house list leaves zero houses.
+  assert.deepEqual(
+    displayCounts({
+      ...raw,
+      buildings: '1',
+      flats: '0',
+      rowHouses: '0',
+      rowHouseBuildings: '1',
+    } as unknown as CountRow),
+    { buildings: 0, flats: 0, rowHouses: 0, residents: 4, maintenance: 1 },
+  );
 });
 void test('identifiers reject malformed values before integer conversion and retain unsigned limits', () => {
   for (const value of [
@@ -99,6 +192,9 @@ void test('setup schemas reject impersonation, malformed dates/money, duplicate 
   assert.equal(parse(pageSchema, { search: '  Test society  ' }).search, 'Test society');
   assert.throws(() => parse(pageSchema, { search: 'Test\u0000society' }));
   assert.throws(() => parse(pageSchema, { search: 'x'.repeat(81) }));
+  for (const type of ['SOC', 'FLT', 'TWP']) assert.equal(parse(pageSchema, { type }).type, type);
+  for (const type of ['soc', 'SOC%', "SOC' OR 1=1", 'ABC'])
+    assert.throws(() => parse(pageSchema, { type }));
   assert.throws(() =>
     parse(buildingSchema, {
       revision: '1',
@@ -225,4 +321,21 @@ void test('community codes use the type prefix and grow past four digits without
   for (const type of ['soc', 'XYZ', ''])
     assert.equal(nextCodeSchema.safeParse({ type }).success, false, type);
   assert.equal(nextCodeSchema.safeParse({ type: 'SOC', extra: '1' }).success, false);
+});
+
+void test('audit modules group every audited record type and reject unknown filters', () => {
+  assert.equal(auditModuleOf('society'), 'society_setup');
+  assert.equal(auditModuleOf('flat'), 'property');
+  assert.equal(auditModuleOf('payment'), 'payments');
+  assert.equal(auditModuleOf('maintenance_charge_type'), 'billing');
+  assert.equal(auditModuleOf('complaint'), 'community');
+  assert.equal(auditModuleOf('something_new'), 'other');
+  assert.equal(auditTrailSchema.safeParse({}).success, true);
+  assert.equal(auditTrailSchema.safeParse({ module: 'payments', pageSize: '50' }).success, true);
+  for (const input of [
+    { module: 'nope' },
+    { pageSize: '51' },
+    { from: '2026-10-05', to: '2026-10-01' },
+  ])
+    assert.equal(auditTrailSchema.safeParse(input).success, false, JSON.stringify(input));
 });

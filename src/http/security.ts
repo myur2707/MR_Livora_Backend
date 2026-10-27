@@ -25,6 +25,7 @@ const queryRoutes = [
   '/society/registration-requests',
   '/platform/societies',
   '/platform/societies/next-code',
+  '/platform/audit-trail',
 ];
 interface Context {
   token: string;

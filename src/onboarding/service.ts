@@ -12,8 +12,25 @@ import type {
   MaintenanceInput,
   SocietyStatus,
 } from './contracts.js';
-import { assertEditable, assertTransition, assertComplete } from './policy.js';
-import { insert, rows, notFound, utcTimestamp } from './repository.js';
+import { parseStructureDetails } from './contracts.js';
+import {
+  assertEditable,
+  assertTransition,
+  assertComplete,
+  assertSomethingAdded,
+  archivedWingMessage,
+  nothingToAddMessage,
+  numberKey,
+} from './policy.js';
+import type { AddedNumbers, WingResult } from './policy.js';
+import {
+  insert,
+  rows,
+  notFound,
+  utcTimestamp,
+  displayCounts,
+  rowHouseBuildingCode,
+} from './repository.js';
 import type { OnboardingRepository } from './repository.js';
 import type { Scope, SetupRow, Actor } from './repository.js';
 export class OnboardingService {
@@ -83,7 +100,7 @@ export class OnboardingService {
             reviewedAt: null,
             verifierMembershipId: null,
             reviewed: false,
-            counts: { buildings: 0, flats: 0, residents: 0, maintenance: 0 },
+            counts: { buildings: 0, flats: 0, rowHouses: 0, residents: 0, maintenance: 0 },
             requirements: {
               committee: false,
               buildings: false,
@@ -102,9 +119,11 @@ export class OnboardingService {
         'SELECT id,email_normalized AS email,display_name AS displayName,status,delivery_status AS deliveryStatus,expires_at AS expiresAt FROM society_setup_invitations WHERE society_id=? ORDER BY id DESC LIMIT 1',
         [id],
       );
+      // Audit trail: who acted, and for invitations who was invited. Events carry no target,
+      // so each invitation event is matched to the invitation its actor created at that moment.
       const events = await rows(
         db,
-        'SELECT id,actor_user_id AS actorUserId,action,from_status AS fromStatus,to_status AS toStatus,created_at AS createdAt FROM society_onboarding_events WHERE society_id=? ORDER BY id DESC LIMIT 25',
+        "SELECT e.id,e.actor_user_id AS actorUserId,e.action,e.from_status AS fromStatus,e.to_status AS toStatus,e.created_at AS createdAt,COALESCE(sp.display_name,u.email_normalized) AS actorName,u.email_normalized AS actorEmail,i.display_name AS invitedName,i.email_normalized AS invitedEmail,i.status AS invitationStatus,d.details AS details FROM society_onboarding_events e LEFT JOIN society_onboarding_event_details d ON d.society_id=e.society_id AND d.event_id=e.id JOIN users u ON u.id=e.actor_user_id LEFT JOIN society_persons sp ON sp.society_id=e.society_id AND sp.person_id=u.person_id LEFT JOIN society_setup_invitations i ON e.action='committee.invited' AND i.society_id=e.society_id AND i.id=(SELECT x.id FROM society_setup_invitations x WHERE x.society_id=e.society_id AND x.created_by_user_id=e.actor_user_id AND x.created_at<=e.created_at ORDER BY x.created_at DESC,x.id DESC LIMIT 1) WHERE e.society_id=? ORDER BY e.id DESC LIMIT 25",
         [id],
       );
       return {
@@ -114,17 +133,16 @@ export class OnboardingService {
         timezone: setup.timezone,
         status: setup.status,
         revision: setup.revision,
-        counts: {
-          buildings: Number(counts.buildings),
-          flats: Number(counts.flats),
-          residents: Number(counts.residents),
-          maintenance: Number(counts.maintenance),
-        },
+        counts: displayCounts(counts),
         requirements: this.repository.requirements(setup, counts),
         invitation: invitations[0]
           ? { ...invitations[0], expiresAt: utcTimestamp(invitations[0]['expiresAt']) }
           : null,
-        events: events.map((event) => ({ ...event, createdAt: utcTimestamp(event['createdAt']) })),
+        events: events.map((event) => ({
+          ...event,
+          createdAt: utcTimestamp(event['createdAt']),
+          details: parseStructureDetails(event['details']),
+        })),
         reviewed: setup.reviewed_revision === setup.revision,
         reviewedAt: utcTimestamp(setup.reviewed_at),
         verifiedAt: utcTimestamp(setup.verified_at),
@@ -132,18 +150,18 @@ export class OnboardingService {
       };
     });
   }
-  async change(
+  async change<T = void>(
     session: Session,
     id: string,
     scope: Scope,
     revision: string,
-    work: (db: PoolConnection, setup: SetupRow, actor: Actor) => Promise<void>,
-  ) {
-    await this.repository.database.transaction(async (db) => {
+    work: (db: PoolConnection, setup: SetupRow, actor: Actor) => Promise<T>,
+  ): Promise<T> {
+    return this.repository.database.transaction(async (db) => {
       const { actor, setup } = await this.repository.access(db, session, id, scope);
       if (setup.revision !== revision)
         throw new ApiError(409, 'REVISION_CONFLICT', 'Setup changed. Refresh before trying again.');
-      await work(db, setup, actor);
+      return work(db, setup, actor);
     });
   }
   async transition(
@@ -187,12 +205,17 @@ export class OnboardingService {
     scope: Scope,
     input: BuildingInput,
     audit: RequestAudit,
-  ) {
-    await this.change(session, id, scope, input.revision, async (db, setup, actor) => {
+  ): Promise<WingResult> {
+    return this.change(session, id, scope, input.revision, async (db, setup, actor) => {
       assertEditable(setup.status);
-      await this.insertBuilding(db, id, input);
+      const wing = await this.addWing(db, id, input);
+      assertSomethingAdded([wing]);
       await this.repository.advance(db, setup);
-      await this.repository.event(db, setup, actor, 'building.created', audit);
+      await this.repository.event(db, setup, actor, 'building.created', audit, setup.status, {
+        kind: 'wings',
+        wings: [wing],
+      });
+      return wing;
     });
   }
   async buildingBatch(
@@ -201,14 +224,19 @@ export class OnboardingService {
     scope: Scope,
     input: BuildingBatchInput,
     audit: RequestAudit,
-  ) {
-    await this.change(session, id, scope, input.revision, async (db, setup, actor) => {
+  ): Promise<{ wings: WingResult[] }> {
+    return this.change(session, id, scope, input.revision, async (db, setup, actor) => {
       assertEditable(setup.status);
-      for (const building of input.buildings) await this.insertBuilding(db, id, building);
+      const wings: WingResult[] = [];
+      for (const building of input.buildings) wings.push(await this.addWing(db, id, building));
+      assertSomethingAdded(wings);
       await this.repository.advance(db, setup);
-      for (let index = 0; index < input.buildings.length; index++) {
-        await this.repository.event(db, setup, actor, 'building.created', audit);
-      }
+      // One event per save; its details list every wing, including skipped numbers.
+      await this.repository.event(db, setup, actor, 'building.created', audit, setup.status, {
+        kind: 'wings',
+        wings,
+      });
+      return { wings };
     });
   }
   async rowHouses(
@@ -217,14 +245,14 @@ export class OnboardingService {
     scope: Scope,
     input: RowHousesInput,
     audit: RequestAudit,
-  ) {
-    await this.change(session, id, scope, input.revision, async (db, setup, actor) => {
+  ): Promise<AddedNumbers> {
+    return this.change(session, id, scope, input.revision, async (db, setup, actor) => {
       assertEditable(setup.status);
       // Reuse one tenant-scoped group so later ranges retain house-number uniqueness.
       const groups = await rows(
         db,
         'SELECT id,name,archived_at FROM buildings WHERE society_id=? AND code=?',
-        [id, 'ROW_HOUSES'],
+        [id, rowHouseBuildingCode],
       );
       const group = groups[0];
       if (group && (group['name'] !== 'Row houses' || group['archived_at'] !== null))
@@ -233,25 +261,73 @@ export class OnboardingService {
         ? String(group['id'])
         : await insert(db, 'INSERT INTO buildings(society_id,code,name) VALUES(?,?,?)', [
             id,
-            'ROW_HOUSES',
+            rowHouseBuildingCode,
             'Row houses',
           ]);
-      await this.insertFlats(db, id, building, input.houses);
+      const houses = await this.addNumbers(db, id, building, input.houses);
+      if (!houses.added.length)
+        throw new ApiError(409, 'NOTHING_TO_ADD', nothingToAddMessage(null, houses.skipped));
       await this.repository.advance(db, setup);
-      await this.repository.event(db, setup, actor, 'building.created', audit);
+      await this.repository.event(db, setup, actor, 'building.created', audit, setup.status, {
+        kind: 'row_houses',
+        ...houses,
+      });
+      return houses;
     });
   }
-  private async insertBuilding(
+  /**
+   * Adds a new wing, or adds the missing flat numbers to an existing wing with that code.
+   * Numbers already in the wing are skipped and reported. An archived wing keeps its code
+   * but cannot take new flats during setup.
+   */
+  private async addWing(
     db: PoolConnection,
     id: string,
     input: Omit<BuildingInput, 'revision'>,
-  ): Promise<void> {
-    const building = await insert(db, 'INSERT INTO buildings(society_id,code,name) VALUES(?,?,?)', [
-      id,
-      input.code,
-      input.name,
-    ]);
-    await this.insertFlats(db, id, building, input.flats);
+  ): Promise<WingResult> {
+    const found = await rows(
+      db,
+      'SELECT id,code,archived_at FROM buildings WHERE society_id=? AND code=? FOR UPDATE',
+      [id, input.code],
+    );
+    const wing = found[0];
+    if (wing?.['archived_at'])
+      throw new ApiError(409, 'WING_ARCHIVED', archivedWingMessage(String(wing['code'])));
+    const building = wing
+      ? String(wing['id'])
+      : await insert(db, 'INSERT INTO buildings(society_id,code,name) VALUES(?,?,?)', [
+          id,
+          input.code,
+          input.name,
+        ]);
+    const numbers = await this.addNumbers(db, id, building, input.flats);
+    return { code: wing ? String(wing['code']) : input.code, existing: !!wing, ...numbers };
+  }
+  /**
+   * Inserts only the numbers the building does not have yet. Archived flats keep their number,
+   * so they count as present. The unique key stays authoritative for concurrent writers.
+   */
+  private async addNumbers(
+    db: PoolConnection,
+    id: string,
+    building: string,
+    flats: BuildingInput['flats'],
+  ): Promise<AddedNumbers> {
+    const present = await rows(
+      db,
+      'SELECT flat_number FROM flats WHERE society_id=? AND building_id=? AND flat_number IN (' +
+        flats.map(() => '?').join(',') +
+        ')',
+      [id, building, ...flats.map((flat) => flat.number)],
+    );
+    // Matches the schema's case-insensitive collation closely enough to pick what to skip.
+    const taken = new Set(present.map((row) => numberKey(String(row['flat_number']))));
+    const fresh = flats.filter((flat) => !taken.has(numberKey(flat.number)));
+    await this.insertFlats(db, id, building, fresh);
+    return {
+      added: fresh.map((flat) => flat.number),
+      skipped: flats.filter((flat) => taken.has(numberKey(flat.number))).map((flat) => flat.number),
+    };
   }
   private async insertFlats(
     db: PoolConnection,
@@ -272,6 +348,7 @@ export class OnboardingService {
     page: number,
     propertyType?: 'FLAT' | 'ROW_HOUSE',
     search?: string,
+    pageSize = 50,
   ) {
     return this.repository.database.transaction(async (db) => {
       await this.repository.access(db, session, id, scope);
@@ -292,8 +369,8 @@ export class OnboardingService {
         'SELECT f.id,b.name AS buildingName,b.code AS buildingCode,f.flat_number AS flatNumber,f.area_sq_ft AS areaSqFt FROM flats f JOIN buildings b ON b.society_id=f.society_id AND b.id=f.building_id WHERE f.society_id=? AND f.archived_at IS NULL AND b.archived_at IS NULL' +
           typeFilter +
           searchFilter +
-          ' ORDER BY b.id,f.id LIMIT 50 OFFSET ?',
-        [...values, (page - 1) * 50],
+          ' ORDER BY b.id,f.id LIMIT ? OFFSET ?',
+        [...values, pageSize, (page - 1) * pageSize],
       );
       const count = await rows(
         db,
@@ -303,7 +380,7 @@ export class OnboardingService {
         values,
       );
       const total = Number(count[0]?.['total']);
-      return { items, total, page, pageSize: 50 };
+      return { items, total, page, pageSize };
     });
   }
   async resident(session: Session, id: string, input: ResidentInput, audit: RequestAudit) {

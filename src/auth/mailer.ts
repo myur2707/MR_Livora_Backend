@@ -20,6 +20,10 @@ export interface TransactionalEmail {
   text: string;
   html: string;
 }
+/** Support contact printed in every email footer. */
+const SUPPORT_PHONE = '+91 9157379787';
+const SUPPORT_PHONE_HREF = 'tel:+919157379787';
+const SUPPORT_EMAIL = 'mrlivora.official@gmail.com';
 function escapeHtml(value: string): string {
   return value
     .replaceAll('&', '&amp;')
@@ -44,7 +48,7 @@ export function transactionalEmail(
   const logo = input.logoUrl
     ? `<td style="padding-right:14px;vertical-align:middle"><img src="${escapeHtml(input.logoUrl)}" width="56" height="56" alt="Mr. Livora" style="display:block;border:0;border-radius:50%;background:#ffffff"></td>`
     : '';
-  const text = `${input.title}\n\n${input.introduction}\n\n${input.actionLabel}:\n${input.link}\n\n${detailsText}\n\nSecurity note: ${input.securityNote}\n\nMr. Livora — Live in a Better Aura\n© ${copyrightYear} Mr. Livora. All rights reserved.`;
+  const text = `${input.title}\n\n${input.introduction}\n\n${input.actionLabel}:\n${input.link}\n\n${detailsText}\n\nSecurity note: ${input.securityNote}\n\nNeed help? For any support or issue, call or WhatsApp us at ${SUPPORT_PHONE} or email ${SUPPORT_EMAIL}. We're happy to help.\n\nMr. Livora — Live in a Better Aura\n© ${copyrightYear} Mr. Livora. All rights reserved.`;
   const html = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(input.title)}</title></head>
 <body style="margin:0;padding:0;background:#f5f3f3;color:#171717;font-family:Arial,Helvetica,sans-serif">
@@ -67,7 +71,10 @@ export function transactionalEmail(
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-top:1px solid #ebe6e6;padding-top:20px">${detailsHtml}</table>
 <div style="margin-top:14px;padding:14px 16px;border-left:4px solid #c91f26;background:#fff3f3;color:#4d4040;font-size:13px;line-height:1.55"><strong style="color:#171717">Security note:</strong> ${escapeHtml(input.securityNote)}</div>
 </td></tr>
-<tr><td style="padding:20px 34px;background:#111111;color:#bdb7b7;text-align:center;font-size:11px;line-height:1.6">This is an automated service message from Mr. Livora.<br>© ${copyrightYear} Mr. Livora. All rights reserved.</td></tr>
+<tr><td style="padding:22px 34px 20px;background:#111111;color:#bdb7b7;text-align:center;font-size:12px;line-height:1.7">
+<div style="margin-bottom:12px;color:#ffffff;font-size:13px"><strong>Need help?</strong> For any support or issue, call or WhatsApp us at <a href="${SUPPORT_PHONE_HREF}" style="color:#ff8a8f;text-decoration:none;font-weight:700">${SUPPORT_PHONE}</a><br>or email <a href="mailto:${SUPPORT_EMAIL}" style="color:#ff8a8f;text-decoration:none;font-weight:700">${SUPPORT_EMAIL}</a>. We're happy to help.</div>
+<div style="font-size:11px">This is an automated service message from Mr. Livora.<br>© ${copyrightYear} Mr. Livora. All rights reserved.</div>
+</td></tr>
 </table></td></tr></table></body></html>`;
   return { text, html };
 }

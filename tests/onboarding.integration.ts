@@ -229,6 +229,51 @@ export async function onboardingIntegration(suite: TestContext, db: Connection):
         assert.ok(Array.isArray(dashboard.data['societiesByMonth']));
         assert.equal(dashboard.data['societiesByMonth'].length, 6);
         assert.ok(!dashboard.raw.includes('outstanding'));
+        // Platform audit trail: who/what/when across modules, platform only, no private values.
+        const trail = await platform.request('/platform/audit-trail?pageSize=10');
+        assert.equal(trail.status, 200, trail.raw);
+        assert.ok(Array.isArray(trail.data['items']));
+        const entries = trail.data['items'] as Record<string, unknown>[];
+        assert.ok(entries.length > 0);
+        for (const entry of entries) {
+          assert.deepEqual(Object.keys(entry).sort(), [
+            'action',
+            'actorEmail',
+            'actorPlatform',
+            'createdAt',
+            'details',
+            'entityId',
+            'entityType',
+            'fromStatus',
+            'id',
+            'module',
+            'societyCode',
+            'societyId',
+            'societyName',
+            'toStatus',
+          ]);
+          // Status changes and structure facts come only from setup events, never other modules.
+          if (entry['entityType'] !== 'society') {
+            assert.equal(entry['details'], null);
+            assert.equal(entry['fromStatus'], null);
+          }
+        }
+        assert.ok(!trail.raw.includes('safe_metadata') && !trail.raw.includes('Metadata'));
+        const setupOnly = await platform.request('/platform/audit-trail?module=society_setup');
+        assert.equal(setupOnly.status, 200);
+        assert.ok(
+          (setupOnly.data['items'] as Record<string, unknown>[]).every(
+            (entry) => entry['module'] === 'society_setup' && entry['entityType'] === 'society',
+          ),
+        );
+        for (const query of ['module=unknown', 'pageSize=51', 'from=2026-02-30', 'extra=1'])
+          assert.equal(
+            (await platform.request('/platform/audit-trail?' + query)).status,
+            400,
+            query,
+          );
+        assert.equal((await outsider.request('/platform/audit-trail')).status, 403);
+        assert.equal((await anonymous.request('/platform/audit-trail')).status, 401);
         // Auto codes: per-type sequence, duplicates get a specific error, platform only.
         const next = async (type: string) => {
           const response = await platform.request('/platform/societies/next-code?type=' + type);
@@ -240,6 +285,14 @@ export async function onboardingIntegration(suite: TestContext, db: Connection):
         await create(first);
         const second = await next('TWP');
         assert.equal(Number(second.slice(4)), Number(first.slice(4)) + 1);
+        const townships = await platform.request('/platform/societies?pageSize=50&type=TWP');
+        assert.equal(townships.status, 200);
+        const townshipCodes = (townships.data['items'] as Record<string, unknown>[]).map((item) =>
+          String(item['code']),
+        );
+        assert.ok(townshipCodes.includes(first));
+        assert.ok(townshipCodes.every((code) => code.startsWith('TWP-')));
+        assert.equal((await platform.request('/platform/societies?type=OTHER')).status, 400);
         const taken = await platform.request('/platform/societies', {
           code: first,
           name: 'Duplicate',
@@ -310,32 +363,65 @@ export async function onboardingIntegration(suite: TestContext, db: Connection):
         );
         assert.equal(Number(counts[0]?.['total']), 8);
         const before = await revision(platform, id);
-        assert.equal(
-          (await platform.request(path, { revision: before, buildings: [wing('E'), wing('A')] }))
-            .status,
-          409,
-        );
+        const nothingNew = await platform.request(path, {
+          revision: before,
+          buildings: [wing('A'), wing('B')],
+        });
+        assert.equal(nothingNew.status, 409);
+        assert.match(nothingNew.raw, /"code":"NOTHING_TO_ADD"/);
         assert.equal(
           await revision(platform, id),
           before,
-          'Failed batch must not advance revision',
-        );
-        const [rolledBack] = await db.execute<RowDataPacket[]>(
-          'SELECT COUNT(*) AS total FROM buildings WHERE society_id=? AND code=?',
-          [id, 'E'],
-        );
-        assert.equal(
-          Number(rolledBack[0]?.['total']),
-          0,
-          'Earlier wing must roll back on later conflict',
+          'A save with nothing new must not advance revision',
         );
         const [audits] = await db.execute<RowDataPacket[]>(
           'SELECT COUNT(*) AS total FROM audit_logs WHERE society_id=? AND action=?',
           [id, 'building.created'],
         );
-        assert.equal(Number(audits[0]?.['total']), 4, 'Only committed wings are audited');
-        const large = {
+        assert.equal(Number(audits[0]?.['total']), 1, 'One audited event per committed save');
+        // An existing wing code takes only its missing flat numbers; present ones are skipped.
+        const appended = await platform.request(path, {
           revision: before,
+          buildings: [
+            {
+              code: 'A',
+              name: 'Ignored rename',
+              flats: ['101', '102', '103'].map((number) => ({ number, areaSqFt: null })),
+            },
+            wing('E'),
+          ],
+        });
+        assert.equal(appended.status, 201);
+        assert.deepEqual(appended.data['wings'], [
+          { code: 'A', existing: true, added: ['103'], skipped: ['101', '102'] },
+          { code: 'E', existing: false, added: ['101', '102'], skipped: [] },
+        ]);
+        const [wingA] = await db.execute<RowDataPacket[]>(
+          'SELECT b.name, COUNT(f.id) AS flats FROM buildings b JOIN flats f ON f.society_id=b.society_id AND f.building_id=b.id WHERE b.society_id=? AND b.code=? GROUP BY b.id',
+          [id, 'A'],
+        );
+        assert.equal(wingA[0]?.['name'], 'Wing A', 'An existing wing keeps its name');
+        assert.equal(Number(wingA[0]?.['flats']), 3);
+        const [afterAppend] = await db.execute<RowDataPacket[]>(
+          'SELECT COUNT(*) AS total FROM audit_logs WHERE society_id=? AND action=?',
+          [id, 'building.created'],
+        );
+        assert.equal(Number(afterAppend[0]?.['total']), 2, 'A refused save writes no history');
+        const history = (await detail(platform, id))['events'];
+        assert.ok(Array.isArray(history));
+        assert.deepEqual((history[0] as Record<string, unknown>)['details'], {
+          kind: 'wings',
+          wings: [
+            { code: 'A', existing: true, added: ['103'], skipped: ['101', '102'] },
+            { code: 'E', existing: false, added: ['101', '102'], skipped: [] },
+          ],
+        });
+        await assert.rejects(
+          db.execute('DELETE FROM society_onboarding_event_details WHERE society_id=?', [id]),
+          'Event details are append-only',
+        );
+        const large = {
+          revision: await revision(platform, id),
           buildings: Array.from({ length: 5 }, (_, index) => ({
             code: 'L' + index,
             name: 'Large wing ' + index,
@@ -366,7 +452,7 @@ export async function onboardingIntegration(suite: TestContext, db: Connection):
       },
     );
     await suite.test(
-      'row houses reuse a scoped group and roll back duplicate ranges with revision and security checks',
+      'row houses reuse a scoped group and skip existing numbers with revision and security checks',
       async () => {
         clockOffset += 60_000;
         const id = await create('STEP4_HOUSES');
@@ -396,15 +482,20 @@ export async function onboardingIntegration(suite: TestContext, db: Connection):
         ]);
         assert.deepEqual(results.map((r) => r.status).sort(), [201, 409]);
         const before = await revision(platform, id);
-        assert.equal(
-          (await platform.request(path, { revision: before, houses: houses(['6', '5']) })).status,
-          409,
-        );
+        const nothingNew = await platform.request(path, {
+          revision: before,
+          houses: houses(['5', '4']),
+        });
+        assert.equal(nothingNew.status, 409);
+        assert.match(nothingNew.raw, /"code":"NOTHING_TO_ADD"/);
+        assert.match(nothingNew.raw, /All of these row houses already exist \(5 and 4\)/);
         assert.equal(await revision(platform, id), before);
-        assert.equal(
-          (await platform.request(path, { revision: before, houses: houses(['6', '7']) })).status,
-          201,
-        );
+        const appended = await platform.request(path, {
+          revision: before,
+          houses: houses(['5', '6', '7']),
+        });
+        assert.equal(appended.status, 201);
+        assert.deepEqual(appended.data, { added: ['6', '7'], skipped: ['5'] });
         const [groups] = await db.execute<RowDataPacket[]>(
           'SELECT COUNT(*) AS total FROM buildings WHERE society_id=? AND code=?',
           [id, 'ROW_HOUSES'],
@@ -427,6 +518,15 @@ export async function onboardingIntegration(suite: TestContext, db: Connection):
         );
         assert.equal(flatPage.status, 200);
         assert.equal(flatPage.data['total'], 0);
+        const detail = await platform.request('/platform/societies/' + id);
+        assert.equal(detail.status, 200);
+        assert.deepEqual(detail.data['counts'], {
+          buildings: 0,
+          flats: 0,
+          rowHouses: 7,
+          residents: 0,
+          maintenance: 0,
+        });
         const [audits] = await db.execute<RowDataPacket[]>(
           'SELECT COUNT(*) AS total FROM audit_logs WHERE society_id=? AND action=?',
           [id, 'building.created'],
@@ -491,6 +591,20 @@ export async function onboardingIntegration(suite: TestContext, db: Connection):
         await queue.idle();
         currentToken = token();
         assert.notEqual(currentToken, old);
+        // Audit trail names the actor and, per invitation event, whom it invited.
+        const history = await platform.request('/platform/societies/' + society);
+        assert.ok(Array.isArray(history.data['events']));
+        const invited = (history.data['events'] as Record<string, unknown>[]).filter(
+          (event) => event['action'] === 'committee.invited',
+        );
+        assert.ok(invited.length >= 2);
+        for (const event of invited.slice(0, 2)) {
+          assert.equal(event['invitedEmail'], 'step4-committee@example.invalid');
+          assert.equal(event['invitedName'], 'Initial Committee');
+          assert.equal(typeof event['actorEmail'], 'string');
+        }
+        assert.equal(invited[0]?.['invitationStatus'], 'PENDING');
+        assert.equal(invited[1]?.['invitationStatus'], 'REVOKED');
         assert.equal(
           (await anonymous.request('/onboarding/invitations/inspect', { token: old })).status,
           400,
@@ -608,16 +722,18 @@ export async function onboardingIntegration(suite: TestContext, db: Connection):
           platform.request('/platform/societies/' + society + '/buildings', body),
         ]);
         assert.deepEqual(responses.map((v) => v.status).sort(), [201, 409]);
-        assert.equal(responses.find((v) => v.status === 201)?.raw, '');
-        assert.equal(
-          (
-            await platform.request('/platform/societies/' + society + '/buildings', {
-              ...body,
-              revision: await revision(platform, society),
-            })
-          ).status,
-          409,
-        );
+        assert.deepEqual(responses.find((v) => v.status === 201)?.data, {
+          code: 'A',
+          existing: false,
+          added: ['101'],
+          skipped: [],
+        });
+        const repeat = await platform.request('/platform/societies/' + society + '/buildings', {
+          ...body,
+          revision: await revision(platform, society),
+        });
+        assert.equal(repeat.status, 409, 'Re-sending only existing flats saves nothing');
+        assert.match(repeat.raw, /"code":"NOTHING_TO_ADD"/);
         const structure = await committee.request(
           '/onboarding/societies/' + society + '/structure',
         );
@@ -655,6 +771,14 @@ export async function onboardingIntegration(suite: TestContext, db: Connection):
         assert.equal(firstPage.data['items'].length, 50);
         assert.equal(nextPage.data['items'].length, 2);
         assert.equal(firstPage.data['total'], 52);
+        const smallPage = await committee.request(
+          '/onboarding/societies/' + society + '/structure?page=6&pageSize=10',
+        );
+        assert.equal(smallPage.status, 200);
+        assert.equal(smallPage.data['pageSize'], 10);
+        assert.equal(smallPage.data['total'], 52);
+        assert.ok(Array.isArray(smallPage.data['items']));
+        assert.equal(smallPage.data['items'].length, 2);
         const filtered = await committee.request(
           '/onboarding/societies/' + society + '/structure?page=2&propertyType=FLAT',
         );
