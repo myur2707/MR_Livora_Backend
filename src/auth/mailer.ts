@@ -1,6 +1,7 @@
 import { createTransport } from 'nodemailer';
 import type { loadConfig } from './config.js';
 import type { ResidentMailer } from '../resident-access/accounts.js';
+import { supportContact } from './support-contact.js';
 export interface ResetMailer {
   send(email: string, link: string): Promise<void>;
 }
@@ -21,9 +22,9 @@ export interface TransactionalEmail {
   html: string;
 }
 /** Support contact printed in every email footer. */
-const SUPPORT_PHONE = '+91 9157379787';
-const SUPPORT_PHONE_HREF = 'tel:+919157379787';
-const SUPPORT_EMAIL = 'mrlivora.official@gmail.com';
+const SUPPORT_PHONE = supportContact.phone;
+const SUPPORT_PHONE_HREF = supportContact.phoneHref;
+const SUPPORT_EMAIL = supportContact.email;
 function escapeHtml(value: string): string {
   return value
     .replaceAll('&', '&amp;')

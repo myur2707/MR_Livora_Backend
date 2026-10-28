@@ -8,6 +8,7 @@ import {
   archivedWingMessage,
   nothingToAddMessage,
   numberKey,
+  assertStructureAccess,
 } from '../src/onboarding/policy.js';
 import { ApiError } from '../src/http/errors.js';
 import { displayCounts } from '../src/onboarding/repository.js';
@@ -28,7 +29,30 @@ import {
   auditModuleOf,
   auditTrailSchema,
   parseStructureDetails,
+  structureAccessSchema,
 } from '../src/onboarding/contracts.js';
+void test('structure access decisions require an exact revision and boolean approval', () => {
+  assert.deepEqual(parse(structureAccessSchema, { revision: '7', allowed: true }), {
+    revision: '7',
+    allowed: true,
+  });
+  for (const value of [1, 'true', null])
+    assert.throws(() => parse(structureAccessSchema, { revision: '7', allowed: value }));
+  assert.throws(() =>
+    parse(structureAccessSchema, { revision: '7', allowed: true, societyId: '2' }),
+  );
+});
+void test('committee structure additions require platform approval while platform setup remains available', () => {
+  assert.doesNotThrow(() => assertStructureAccess('platform', false));
+  assert.doesNotThrow(() => assertStructureAccess('committee', true));
+  assert.throws(
+    () => assertStructureAccess('committee', false),
+    (error: unknown) =>
+      error instanceof ApiError &&
+      error.status === 403 &&
+      error.code === 'STRUCTURE_ACCESS_REQUIRED',
+  );
+});
 void test('resident property choices and structure filters reject unsupported types and scope overrides', () => {
   for (const propertyType of ['FLAT', 'ROW_HOUSE']) {
     assert.equal(parse(structurePageSchema, { propertyType, page: '2' }).page, 2);

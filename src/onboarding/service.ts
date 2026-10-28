@@ -1,6 +1,7 @@
 import type { PoolConnection } from 'mysql2/promise';
 import type { Session, RequestAudit } from '../auth/types.js';
 import { permissions, tenantRoles, roleCapabilities } from '../auth/types.js';
+import { supportContact } from '../auth/support-contact.js';
 import { ApiError } from '../http/errors.js';
 import { sqlTime } from '../auth/repository.js';
 import type {
@@ -24,6 +25,7 @@ import {
   archivedWingMessage,
   nothingToAddMessage,
   numberKey,
+  assertStructureAccess,
 } from './policy.js';
 import type { AddedNumbers, WingResult } from './policy.js';
 import {
@@ -113,6 +115,8 @@ export class OnboardingService {
             },
             invitation: null,
             events: [],
+            structureAccess: { allowed: false, grantedAt: null, revokedAt: null },
+            supportContact,
           };
       }
       const { setup } = await this.repository.access(db, session, id, scope);
@@ -127,6 +131,11 @@ export class OnboardingService {
       const events = await rows(
         db,
         "SELECT e.id,e.actor_user_id AS actorUserId,e.action,e.from_status AS fromStatus,e.to_status AS toStatus,e.created_at AS createdAt,COALESCE(sp.display_name,u.email_normalized) AS actorName,u.email_normalized AS actorEmail,i.display_name AS invitedName,i.email_normalized AS invitedEmail,i.status AS invitationStatus,d.details AS details FROM society_onboarding_events e LEFT JOIN society_onboarding_event_details d ON d.society_id=e.society_id AND d.event_id=e.id JOIN users u ON u.id=e.actor_user_id LEFT JOIN society_persons sp ON sp.society_id=e.society_id AND sp.person_id=u.person_id LEFT JOIN society_setup_invitations i ON e.action='committee.invited' AND i.society_id=e.society_id AND i.id=(SELECT x.id FROM society_setup_invitations x WHERE x.society_id=e.society_id AND x.created_by_user_id=e.actor_user_id AND x.created_at<=e.created_at ORDER BY x.created_at DESC,x.id DESC LIMIT 1) WHERE e.society_id=? ORDER BY e.id DESC LIMIT 25",
+        [id],
+      );
+      const structureAccess = await rows(
+        db,
+        'SELECT allowed,granted_at AS grantedAt,revoked_at AS revokedAt FROM society_onboarding_structure_access WHERE society_id=?',
         [id],
       );
       return {
@@ -150,6 +159,12 @@ export class OnboardingService {
         reviewedAt: utcTimestamp(setup.reviewed_at),
         verifiedAt: utcTimestamp(setup.verified_at),
         verifierMembershipId: setup.verified_by_membership_id,
+        structureAccess: {
+          allowed: Number(structureAccess[0]?.['allowed'] ?? 0) === 1,
+          grantedAt: utcTimestamp(structureAccess[0]?.['grantedAt']),
+          revokedAt: utcTimestamp(structureAccess[0]?.['revokedAt']),
+        },
+        supportContact,
       };
     });
   }
@@ -165,6 +180,54 @@ export class OnboardingService {
       if (setup.revision !== revision)
         throw new ApiError(409, 'REVISION_CONFLICT', 'Setup changed. Refresh before trying again.');
       return work(db, setup, actor);
+    });
+  }
+  private async requireStructureAccess(
+    db: PoolConnection,
+    id: string,
+    scope: Scope,
+  ): Promise<void> {
+    if (scope === 'platform') return;
+    const grant = await rows(
+      db,
+      'SELECT society_id FROM society_onboarding_structure_access WHERE society_id=? AND allowed=1 FOR SHARE',
+      [id],
+    );
+    assertStructureAccess(scope, grant.length > 0);
+  }
+  async setStructureAccess(
+    session: Session,
+    id: string,
+    revision: string,
+    allowed: boolean,
+    audit: RequestAudit,
+  ): Promise<void> {
+    await this.change(session, id, 'platform', revision, async (db, setup, actor) => {
+      assertEditable(setup.status);
+      const at = sqlTime(this.repository.clock());
+      await db.execute(
+        `INSERT INTO society_onboarding_structure_access(society_id,allowed,granted_by_user_id,granted_at,revoked_by_user_id,revoked_at,updated_at)
+         VALUES(?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE allowed=VALUES(allowed),granted_by_user_id=VALUES(granted_by_user_id),granted_at=VALUES(granted_at),revoked_by_user_id=VALUES(revoked_by_user_id),revoked_at=VALUES(revoked_at),updated_at=VALUES(updated_at)`,
+        [
+          id,
+          allowed ? 1 : 0,
+          allowed ? actor.userId : null,
+          allowed ? at : null,
+          allowed ? null : actor.userId,
+          allowed ? null : at,
+          at,
+        ],
+      );
+      await this.repository.advance(db, setup);
+      await this.repository.auditEntity(
+        db,
+        setup,
+        actor,
+        allowed ? 'structure_access.granted' : 'structure_access.revoked',
+        'society',
+        id,
+        audit,
+      );
     });
   }
   async transition(
@@ -211,6 +274,7 @@ export class OnboardingService {
   ): Promise<WingResult> {
     return this.change(session, id, scope, input.revision, async (db, setup, actor) => {
       assertEditable(setup.status);
+      await this.requireStructureAccess(db, id, scope);
       const wing = await this.addWing(db, id, input);
       assertSomethingAdded([wing]);
       await this.repository.advance(db, setup);
@@ -230,6 +294,7 @@ export class OnboardingService {
   ): Promise<{ wings: WingResult[] }> {
     return this.change(session, id, scope, input.revision, async (db, setup, actor) => {
       assertEditable(setup.status);
+      await this.requireStructureAccess(db, id, scope);
       const wings: WingResult[] = [];
       for (const building of input.buildings) wings.push(await this.addWing(db, id, building));
       assertSomethingAdded(wings);
@@ -251,6 +316,7 @@ export class OnboardingService {
   ): Promise<AddedNumbers> {
     return this.change(session, id, scope, input.revision, async (db, setup, actor) => {
       assertEditable(setup.status);
+      await this.requireStructureAccess(db, id, scope);
       // Reuse one tenant-scoped group so later ranges retain house-number uniqueness.
       const groups = await rows(
         db,

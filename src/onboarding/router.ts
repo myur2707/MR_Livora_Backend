@@ -22,6 +22,7 @@ import {
   maintenancePageSchema,
   archiveSetupRecordSchema,
   structureRecordSchema,
+  structureAccessSchema,
   confirmationSchema,
   acceptSchema,
   inspectSchema,
@@ -158,6 +159,23 @@ export function onboardingRouter(
         body.revision,
         body.status,
         body.fromStatus,
+        audit(r, s),
+      );
+      s.sendStatus(204);
+    },
+  );
+  router.put(
+    '/platform/societies/:id/structure-access',
+    security.csrf,
+    security.authenticated,
+    security.platform,
+    async (r, s) => {
+      const body = parse(structureAccessSchema, r.body);
+      await onboarding.setStructureAccess(
+        session(r),
+        id(r),
+        body.revision,
+        body.allowed,
         audit(r, s),
       );
       s.sendStatus(204);

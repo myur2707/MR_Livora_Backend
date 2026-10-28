@@ -117,6 +117,10 @@ export const maintenanceSchema = z.strictObject({
   effectiveFrom: date,
 });
 export const archiveSetupRecordSchema = z.strictObject(revision);
+export const structureAccessSchema = z.strictObject({
+  ...revision,
+  allowed: z.boolean(),
+});
 export const structureRecordSchema = z.strictObject({
   ...revision,
   flatNumber: text(32),

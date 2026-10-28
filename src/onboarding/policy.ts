@@ -1,5 +1,14 @@
 import { ApiError } from '../http/errors.js';
 import type { SocietyStatus } from './contracts.js';
+import type { Scope } from './repository.js';
+export function assertStructureAccess(scope: Scope, allowed: boolean): void {
+  if (scope === 'platform' || allowed) return;
+  throw new ApiError(
+    403,
+    'STRUCTURE_ACCESS_REQUIRED',
+    'Contact Mr. Livora support and ask a platform administrator to enable structure additions.',
+  );
+}
 export const transitions: Record<SocietyStatus, readonly SocietyStatus[]> = {
   DRAFT: ['SETUP_IN_PROGRESS', 'DEACTIVATED'],
   SETUP_IN_PROGRESS: ['PENDING_VERIFICATION', 'DEACTIVATED'],
